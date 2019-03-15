@@ -1,5 +1,3 @@
-extern crate clap;
-
 fn main() {
   // Set up the command-line interface.
   clap::App::new("Paxos")
