@@ -1,11 +1,12 @@
 language: rust
 rust:
   - stable
-script:
-  - curl https://raw.githubusercontent.com/stepchowfun/tagref/master/install.sh -LSfs | sh
+install:
   - rustup component add clippy
+  - rustup component add rustfmt
+script:
   - cargo clean
+  - cargo fmt --all -- --check
   - cargo clippy -- --deny clippy::pedantic
   - cargo test
   - cargo run
-  - tagref
