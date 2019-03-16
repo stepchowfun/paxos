@@ -6,7 +6,7 @@ An implementation of single-decree Paxos.
 
 ## Installation
 
-You can build and install Tagref with [Cargo](https://doc.rust-lang.org/book/second-edition/ch14-04-installing-binaries.html):
+You can build and install with [Cargo](https://doc.rust-lang.org/book/second-edition/ch14-04-installing-binaries.html):
 
 ```sh
 cargo install --force --path .
