@@ -10,5 +10,5 @@ script:
   - cargo fmt --all -- --check
   - cargo clippy -- --deny clippy::pedantic
   - cargo test
-  - cargo run
+  - cargo run -- --version
   - tagref
