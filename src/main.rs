@@ -88,8 +88,11 @@ fn main() {
 
   // Parse the config file.
   let config_data =
-    fs::read_to_string(config_file_path).unwrap_or_else(|_| {
-      eprintln!("Error: Unable to read file `{}`.", config_file_path);
+    fs::read_to_string(config_file_path).unwrap_or_else(|err| {
+      eprintln!(
+        "Error: Unable to read file `{}`. Reason: {}",
+        config_file_path, err
+      );
       exit(1);
     });
   let nodes_pre_me = config::parse(&config_data).unwrap_or_else(|err| {
@@ -102,8 +105,11 @@ fn main() {
 
   // Parse the node index.
   let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required]
-  let node_index: usize = node_repr.parse().unwrap_or_else(|_| {
-    eprintln!("Error: `{}` is not a valid node index.", node_repr);
+  let node_index: usize = node_repr.parse().unwrap_or_else(|err| {
+    eprintln!(
+      "Error: `{}` is not a valid node index. Reason: {}",
+      node_repr, err
+    );
     exit(1);
   });
   if node_index >= nodes_pre_me.len() {
@@ -122,8 +128,8 @@ fn main() {
   let ip: Ipv4Addr = ip_repr.map_or_else(
     || *nodes[node_index].address.ip(), // [ref:node-index-valid]
     |x| {
-      x.parse().unwrap_or_else(|_| {
-        eprintln!("Error: `{}` is not a valid IP address.", x);
+      x.parse().unwrap_or_else(|err| {
+        eprintln!("Error: `{}` is not a valid IP address. Reason: {}", x, err);
         exit(1);
       })
     },
@@ -134,8 +140,11 @@ fn main() {
   let port: u16 = port_repr.map_or_else(
     || nodes[node_index].address.port(), // [ref:node-index-valid]
     |x| {
-      x.parse().unwrap_or_else(|_| {
-        eprintln!("Error: `{}` is not a valid port number.", x);
+      x.parse().unwrap_or_else(|err| {
+        eprintln!(
+          "Error: `{}` is not a valid port number. Reason: {}",
+          x, err
+        );
         exit(1);
       })
     },
@@ -144,7 +153,14 @@ fn main() {
   // Start the server.
   hyper::rt::run(hyper::rt::lazy(move || {
     let address = SocketAddr::V4(SocketAddrV4::new(ip, port));
-    let server = Server::bind(&address)
+    let server = Server::try_bind(&address)
+      .unwrap_or_else(|err| {
+        eprintln!(
+          "Error: Unable to bind to address `{}`. Reason: {}",
+          address, err
+        );
+        exit(1);
+      })
       .serve(|| service_fn(handler))
       .map_err(|e| eprintln!("Server error: {}", e));
     println!("Listening on http://{}.", address);
