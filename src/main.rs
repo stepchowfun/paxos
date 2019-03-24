@@ -10,7 +10,8 @@ use std::fs;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::process::exit;
 
-const CONFIG_FILE_PATH: &str = "config.yml";
+const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
+const CONFIG_OPTION: &str = "config";
 const IP_OPTION: &str = "ip";
 const NODE_OPTION: &str = "node";
 const PORT_OPTION: &str = "port";
@@ -49,6 +50,16 @@ fn main() {
         .required(true), // [tag:node-required]
     )
     .arg(
+      Arg::with_name(CONFIG_OPTION)
+        .short("c")
+        .long(CONFIG_OPTION)
+        .value_name("PATH")
+        .help(
+          "Sets the path of the config file (default: config.yml)",
+        )
+        .takes_value(true),
+    )
+    .arg(
       Arg::with_name(IP_OPTION)
         .short("i")
         .long(IP_OPTION)
@@ -70,16 +81,21 @@ fn main() {
     )
     .get_matches();
 
+  // Parse the config file path.
+  let config_file_path = matches
+    .value_of(CONFIG_OPTION)
+    .unwrap_or(CONFIG_FILE_DEFAULT_PATH);
+
   // Parse the config file.
   let config_data =
-    fs::read_to_string(CONFIG_FILE_PATH).unwrap_or_else(|_| {
-      eprintln!("Error: Unable to read file `{}`.", CONFIG_FILE_PATH);
+    fs::read_to_string(config_file_path).unwrap_or_else(|_| {
+      eprintln!("Error: Unable to read file `{}`.", config_file_path);
       exit(1);
     });
   let nodes_pre_me = config::parse(&config_data).unwrap_or_else(|err| {
     eprintln!(
       "Error: Unable to parse file `{}`. Reason: {}.",
-      CONFIG_FILE_PATH, err
+      config_file_path, err
     );
     exit(1);
   });
