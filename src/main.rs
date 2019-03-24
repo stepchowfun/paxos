@@ -1,13 +1,17 @@
+mod config;
+
 use clap::{App, Arg};
 use futures::{future, Stream};
 use hyper::{
   rt::Future, service::service_fn, Body, Method, Request, Response, Server,
   StatusCode,
 };
+use std::fs;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::process::exit;
 
-const PORT_DEFAULT: &str = "3000";
+const CONFIG_FILE_PATH: &str = "config.yml";
+const NODE_OPTION: &str = "node";
 const PORT_OPTION: &str = "port";
 
 // This function handles incoming requests.
@@ -35,24 +39,68 @@ fn main() {
     .author("Stephan Boyer <stephan@stephanboyer.com>")
     .about("This is an implementation of single-decree paxos.")
     .arg(
+      Arg::with_name(NODE_OPTION)
+        .short("n")
+        .long(NODE_OPTION)
+        .value_name("INDEX")
+        .help("Sets the index of the node corresponding to this instance")
+        .takes_value(true)
+        .required(true), // [tag:node-required]
+    )
+    .arg(
       Arg::with_name(PORT_OPTION)
         .short("p")
         .long(PORT_OPTION)
         .value_name("PORT")
         .help(
-          &format!("Sets the port to run on (default: {})", PORT_DEFAULT)
-            .to_owned(),
+          "Sets the port to run on (if different from the configured node)",
         )
         .takes_value(true),
     )
     .get_matches();
 
-  // Parse the port number.
-  let port_repr = matches.value_of(PORT_OPTION).unwrap_or(PORT_DEFAULT);
-  let port = port_repr.parse().unwrap_or_else(|_| {
-    eprintln!("Error: `{}` is not a valid port number.", port_repr);
+  // Parse the config file.
+  let config_data =
+    fs::read_to_string(CONFIG_FILE_PATH).unwrap_or_else(|_| {
+      eprintln!("Error: Unable to read file `{}`.", CONFIG_FILE_PATH);
+      exit(1);
+    });
+  let nodes_pre_me = config::parse(&config_data).unwrap_or_else(|err| {
+    eprintln!(
+      "Error: Unable to parse file `{}`. Reason: {}.",
+      CONFIG_FILE_PATH, err
+    );
     exit(1);
   });
+
+  // Parse the node index.
+  let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required].
+  let node_index: usize = node_repr.parse().unwrap_or_else(|_| {
+    eprintln!("Error: `{}` is not a valid node index.", node_repr);
+    exit(1);
+  });
+  if node_index >= nodes_pre_me.len() {
+    eprintln!("Error: There is no node with index {}.", node_repr);
+    exit(1); // [tag:node-index-valid]
+  }
+  let nodes: Vec<config::Node> = (0..nodes_pre_me.len())
+    .map(|i| config::Node {
+      me: i == node_index,
+      ..nodes_pre_me[i]
+    })
+    .collect();
+
+  // Parse the port number, if given.
+  let port_repr: Option<&str> = matches.value_of(PORT_OPTION);
+  let port: u16 = port_repr.map_or_else(
+    || nodes[node_index].address.port(), // [ref:node-index-valid]
+    |x| {
+      x.parse().unwrap_or_else(|_| {
+        eprintln!("Error: `{}` is not a valid port number.", x);
+        exit(1);
+      })
+    },
+  );
 
   // Start the server.
   hyper::rt::run(

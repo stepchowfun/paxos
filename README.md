@@ -18,11 +18,17 @@ You can run that command again to update an existing installation.
 
 ```
 USAGE:
-    paxos
+    paxos [OPTIONS] --node <INDEX>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
+
+OPTIONS:
+    -n, --node <INDEX>    Sets the index of the node corresponding to this
+                          instance
+    -p, --port <PORT>     Sets the port to run on (if different from the
+                          configured node)
 ```
 
 ## References
