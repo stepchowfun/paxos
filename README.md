@@ -25,14 +25,15 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
-    -c, --config <PATH>    Sets the path of the config file (default:
-                           config.yml)
-    -i, --ip <ADDRESS>     Sets the IP address to run on (if different from the
-                           configured node)
-    -n, --node <INDEX>     Sets the index of the node corresponding to this
-                           instance
-    -p, --port <PORT>      Sets the port to run on (if different from the
-                           configured node)
+    -c, --config <PATH>      Sets the path of the config file (default:
+                             config.yml)
+    -i, --ip <ADDRESS>       Sets the IP address to run on (if different from
+                             the configuration)
+    -n, --node <INDEX>       Sets the index of the node corresponding to this
+                             instance
+    -p, --port <PORT>        Sets the port to run on (if different from the
+                             configuration)
+    -v, --propose <VALUE>    Proposes a value to the cluster
 ```
 
 ## References
