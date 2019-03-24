@@ -11,6 +11,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::process::exit;
 
 const CONFIG_FILE_PATH: &str = "config.yml";
+const IP_OPTION: &str = "ip";
 const NODE_OPTION: &str = "node";
 const PORT_OPTION: &str = "port";
 
@@ -48,6 +49,16 @@ fn main() {
         .required(true), // [tag:node-required]
     )
     .arg(
+      Arg::with_name(IP_OPTION)
+        .short("i")
+        .long(IP_OPTION)
+        .value_name("ADDRESS")
+        .help(
+          "Sets the IP address to run on (if different from the configured node)",
+        )
+        .takes_value(true),
+    )
+    .arg(
       Arg::with_name(PORT_OPTION)
         .short("p")
         .long(PORT_OPTION)
@@ -74,7 +85,7 @@ fn main() {
   });
 
   // Parse the node index.
-  let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required].
+  let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required]
   let node_index: usize = node_repr.parse().unwrap_or_else(|_| {
     eprintln!("Error: `{}` is not a valid node index.", node_repr);
     exit(1);
@@ -90,6 +101,18 @@ fn main() {
     })
     .collect();
 
+  // Parse the IP address, if given.
+  let ip_repr: Option<&str> = matches.value_of(IP_OPTION);
+  let ip: Ipv4Addr = ip_repr.map_or_else(
+    || Ipv4Addr::UNSPECIFIED,
+    |x| {
+      x.parse().unwrap_or_else(|_| {
+        eprintln!("Error: `{}` is not a valid IP address.", x);
+        exit(1);
+      })
+    },
+  );
+
   // Parse the port number, if given.
   let port_repr: Option<&str> = matches.value_of(PORT_OPTION);
   let port: u16 = port_repr.map_or_else(
@@ -103,12 +126,13 @@ fn main() {
   );
 
   // Start the server.
-  hyper::rt::run(
-    Server::bind(&SocketAddr::V4(SocketAddrV4::new(
-      Ipv4Addr::UNSPECIFIED,
-      port,
-    )))
-    .serve(|| service_fn(handler))
-    .map_err(|e| eprintln!("Server error: {}", e)),
-  );
+  hyper::rt::run(hyper::rt::lazy(move || {
+    let address = SocketAddr::V4(SocketAddrV4::new(ip, port));
+    let server = Server::bind(&address)
+      .serve(|| service_fn(handler))
+      .map_err(|e| eprintln!("Server error: {}", e));
+    println!("Listening on http://{}.", address);
+    hyper::rt::spawn(server);
+    Ok(())
+  }));
 }
