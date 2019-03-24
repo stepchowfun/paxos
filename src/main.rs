@@ -104,7 +104,7 @@ fn main() {
   // Parse the IP address, if given.
   let ip_repr: Option<&str> = matches.value_of(IP_OPTION);
   let ip: Ipv4Addr = ip_repr.map_or_else(
-    || Ipv4Addr::UNSPECIFIED,
+    || *nodes[node_index].address.ip(), // [ref:node-index-valid]
     |x| {
       x.parse().unwrap_or_else(|_| {
         eprintln!("Error: `{}` is not a valid IP address.", x);
