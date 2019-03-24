@@ -25,6 +25,8 @@ FLAGS:
     -V, --version    Prints version information
 
 OPTIONS:
+    -i, --ip <ADDRESS>    Sets the IP address to run on (if different from the
+                          configured node)
     -n, --node <INDEX>    Sets the index of the node corresponding to this
                           instance
     -p, --port <PORT>     Sets the port to run on (if different from the
