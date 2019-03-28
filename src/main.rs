@@ -1,21 +1,30 @@
+mod acceptor;
 mod config;
+mod proposer;
 mod protocol;
 
 use clap::{App, Arg};
-use config::Node;
-use futures::{future, stream::Stream, sync::mpsc};
+use futures::{prelude::*, sync::mpsc};
 use hyper::{
-  rt, rt::Future, service::service_fn, Body, Client, Method, Request,
-  Response, Server, StatusCode,
+  service::service_fn, Body, Client, Method, Request, Response, Server,
+  StatusCode,
 };
+use proposer::propose;
 use protocol::{initial_state, State};
-use std::fs;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::process::exit;
-use std::sync::{Arc, RwLock};
+use std::{
+  fs,
+  net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+  process::exit,
+  sync::{Arc, RwLock},
+  time::Duration,
+};
+use tokio::{prelude::*, timer::timeout};
 
 // We embed the favicon directly into the compiled binary.
 const FAVICON_DATA: &[u8] = include_bytes!("../resources/favicon.ico");
+
+// The maximum amount of time the server will wait for the body of a request
+const BODY_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Defaults
 const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
@@ -28,10 +37,11 @@ const PORT_OPTION: &str = "port";
 const PROPOSE_OPTION: &str = "propose";
 
 struct Settings {
-  nodes: Vec<Node>,
+  nodes: Vec<SocketAddrV4>,
+  node_index: usize,
   ip: Ipv4Addr,
   port: u16,
-  propose_value: Option<String>,
+  proposal: Option<String>,
 }
 
 // Parse the command-line options.
@@ -98,64 +108,52 @@ fn settings() -> Settings {
     .unwrap_or(CONFIG_FILE_DEFAULT_PATH);
 
   // Parse the config file.
-  let config_data =
-    fs::read_to_string(config_file_path).unwrap_or_else(|err| {
-      eprintln!(
-        "Error: Unable to read file `{}`. Reason: {}",
-        config_file_path, err
-      );
-      exit(1);
-    });
-  let nodes_pre_me = config::parse(&config_data).unwrap_or_else(|err| {
+  let config_data = fs::read_to_string(config_file_path).unwrap_or_else(|e| {
+    eprintln!(
+      "Error: Unable to read file `{}`. Reason: {}",
+      config_file_path, e
+    );
+    exit(1);
+  });
+  let config = config::parse(&config_data).unwrap_or_else(|e| {
     eprintln!(
       "Error: Unable to parse file `{}`. Reason: {}.",
-      config_file_path, err
+      config_file_path, e
     );
     exit(1);
   });
 
   // Parse the node index.
   let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required]
-  let node_index: usize = node_repr.parse().unwrap_or_else(|err| {
+  let node_index: usize = node_repr.parse().unwrap_or_else(|e| {
     eprintln!(
       "Error: `{}` is not a valid node index. Reason: {}",
-      node_repr, err
+      node_repr, e
     );
     exit(1);
   });
-  if node_index >= nodes_pre_me.len() {
+  if node_index >= config.nodes.len() {
     eprintln!("Error: There is no node with index {}.", node_repr);
     exit(1); // [tag:node-index-valid]
   }
-  let nodes: Vec<Node> = (0..nodes_pre_me.len())
-    .map(|i| Node {
-      me: i == node_index,
-      ..nodes_pre_me[i]
-    })
-    .collect();
 
   // Parse the IP address, if given.
-  let ip_repr: Option<&str> = matches.value_of(IP_OPTION);
-  let ip: Ipv4Addr = ip_repr.map_or_else(
-    || *nodes[node_index].address.ip(), // [ref:node-index-valid]
+  let ip = matches.value_of(IP_OPTION).map_or_else(
+    || *config.nodes[node_index].ip(), // [ref:node-index-valid]
     |x| {
-      x.parse().unwrap_or_else(|err| {
-        eprintln!("Error: `{}` is not a valid IP address. Reason: {}", x, err);
+      x.parse().unwrap_or_else(|e| {
+        eprintln!("Error: `{}` is not a valid IP address. Reason: {}", x, e);
         exit(1);
       })
     },
   );
 
   // Parse the port number, if given.
-  let port_repr: Option<&str> = matches.value_of(PORT_OPTION);
-  let port: u16 = port_repr.map_or_else(
-    || nodes[node_index].address.port(), // [ref:node-index-valid]
+  let port = matches.value_of(PORT_OPTION).map_or_else(
+    || config.nodes[node_index].port(), // [ref:node-index-valid]
     |x| {
-      x.parse().unwrap_or_else(|err| {
-        eprintln!(
-          "Error: `{}` is not a valid port number. Reason: {}",
-          x, err
-        );
+      x.parse().unwrap_or_else(|e| {
+        eprintln!("Error: `{}` is not a valid port number. Reason: {}", x, e);
         exit(1);
       })
     },
@@ -163,10 +161,11 @@ fn settings() -> Settings {
 
   // Return the settings.
   Settings {
-    nodes,
+    nodes: config.nodes,
+    node_index,
     ip,
     port,
-    propose_value: matches.value_of(PROPOSE_OPTION).map(|x| x.to_string()),
+    proposal: matches.value_of(PROPOSE_OPTION).map(|x| x.to_string()),
   }
 }
 
@@ -175,14 +174,15 @@ fn run(settings: Settings) {
   // Initialize the program state.
   let (quit_sender, quit_receiver) = mpsc::channel(0);
   let state = Arc::new(RwLock::new(initial_state(quit_sender)));
+  let state_for_proposing = state.clone();
 
   // Set up the HTTP server.
   let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
   let server = Server::try_bind(&address)
-    .unwrap_or_else(|err| {
+    .unwrap_or_else(|e| {
       eprintln!(
         "Error: Unable to bind to address `{}`. Reason: {}",
-        address, err
+        address, e
       );
       exit(1);
     })
@@ -190,7 +190,7 @@ fn run(settings: Settings) {
       let state = state.clone();
       service_fn(
         move |req: Request<Body>| -> Box<
-          Future<Item = Response<Body>, Error = hyper::Error> + Send,
+          dyn Future<Item = Response<Body>, Error = timeout::Error<hyper::Error>> + Send,
         > {
           let state = state.clone();
 
@@ -198,14 +198,14 @@ fn run(settings: Settings) {
           // below. If Rust had higher-ranked types or let polymorphism, this
           // could have been implemented as a function.
           macro_rules! rpc {
-            ( $x:ident ) => {
-              Box::new(req.into_body().concat2().map(move |chunk| {
+            ($x:ident) => {
+              Box::new(req.into_body().concat2().timeout(BODY_TIMEOUT).map(move |chunk| {
                 let state = state.clone();
                 let body = chunk.iter().cloned().collect::<Vec<u8>>();
                 let payload = bincode::deserialize(&body).unwrap(); // Safe under non-Byzantine conditions
                 let response = {
                   let mut state_borrow = state.write().unwrap(); // Safe since it can only fail if a panic already happened
-                  protocol::$x(&payload, &mut state_borrow)
+                  acceptor::$x(&payload, &mut state_borrow)
                 };
                 Response::new(Body::from(
                   bincode::serialize(&response).unwrap(),
@@ -226,7 +226,7 @@ fn run(settings: Settings) {
               // Respond with a representation of the program state.
               let state_repr = {
                 let state_borrow: &State = &state.read().unwrap(); // Safe since it can only fail if a panic already happened
-                serde_yaml::to_string(state_borrow).unwrap() // Safe since `State` has straightforward members
+                serde_yaml::to_string(state_borrow).unwrap() // Serialization is safe.
               };
               Box::new(future::ok(Response::new(Body::from(format!(
                 "System operational.\n\n{}",
@@ -270,13 +270,19 @@ fn run(settings: Settings) {
   let client = Client::new();
 
   // Start the runtime.
-  rt::run(rt::lazy(move || {
+  tokio::run(future::lazy(move || {
     // Start the server.
-    rt::spawn(server);
+    tokio::spawn(server);
 
     // Propose a value if applicable.
-    if let Some(value) = settings.propose_value {
-      rt::spawn(protocol::propose(&client, &settings.nodes, &value));
+    if let Some(value) = settings.proposal {
+      tokio::spawn(propose(
+        &client,
+        &settings.nodes,
+        settings.node_index,
+        &value,
+        &state_for_proposing,
+      ));
     }
 
     // Tell the user that the server is running.
