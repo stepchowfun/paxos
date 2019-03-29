@@ -1,4 +1,3 @@
-use futures::sync::mpsc::Sender;
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, net::SocketAddrV4};
 
@@ -52,20 +51,19 @@ pub fn generate_proposal_number(
 // The state of the whole program is described by this struct.
 #[derive(Serialize)]
 pub struct State {
+  pub next_round: u64,
   pub min_proposal_number: Option<ProposalNumber>,
   pub accepted_proposal: Option<(ProposalNumber, String)>,
-  pub next_round: u64,
-  #[serde(skip)]
-  pub quit_sender: Sender<()>,
+  pub chosen_value: Option<String>,
 }
 
 // Return the state in which the program starts.
-pub fn initial_state(quit_sender: Sender<()>) -> State {
+pub fn initial_state() -> State {
   State {
+    next_round: 0,
     min_proposal_number: None,
     accepted_proposal: None,
-    next_round: 0,
-    quit_sender,
+    chosen_value: None,
   }
 }
 

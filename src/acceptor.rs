@@ -100,8 +100,10 @@ pub struct ChooseResponse;
 
 pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
   info!("Consensus achieved.");
-  println!("{}", request.value);
-  let _ = state.quit_sender.try_send(()); // The first attempt (the only one that matters) should succeed
+  if state.chosen_value.is_none() {
+    println!("{}", request.value);
+    state.chosen_value = Some(request.value.clone());
+  }
   ChooseResponse {}
 }
 
