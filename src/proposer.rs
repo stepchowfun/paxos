@@ -1,171 +1,65 @@
-use crate::acceptor::{PrepareRequest, PrepareResponse};
-use crate::protocol::{generate_proposal_number, State};
-use futures::{
-  future::{err, ok},
-  prelude::*,
+use crate::acceptor::{
+  AcceptRequest, AcceptResponse, ChooseRequest, ChooseResponse,
+  PrepareRequest, PrepareResponse, ACCEPT_ENDPOINT, CHOOSE_ENDPOINT,
+  PREPARE_ENDPOINT,
 };
-use hyper::{client::HttpConnector, Body, Client, Method, Request};
-use serde::{de::DeserializeOwned, Serialize};
+use crate::protocol::{generate_proposal_number, State};
+use crate::util::{broadcast, when};
+use futures::{future::ok, prelude::*};
+use hyper::{client::HttpConnector, Client};
+use rand::{thread_rng, Rng};
 use std::{
   net::SocketAddrV4,
   sync::{Arc, RwLock},
-  time::Duration,
+  time::{Duration, Instant},
 };
-use tokio::{prelude::*, timer::timeout};
+use tokio::timer::Delay;
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
-
-// Wait for a sufficient set of futures to finish.
-fn when<
-  I: 'static + Send,
-  F: 'static + Send + Future<Item = I, Error = ()>,
-  R: 'static + Send,
-  K: 'static + Send + Fn(&[I]) -> Option<R>,
->(
-  futures: Vec<F>,
-  k: K,
-) -> Box<dyn Future<Item = R, Error = ()> + Send> {
-  fn when_rec<
-    I: 'static + Send,
-    R: 'static + Send,
-    K: 'static + Send + Fn(&[I]) -> Option<R>,
-  >(
-    stream: Box<dyn Stream<Item = I, Error = ()> + Send>,
-    mut acc: Vec<I>,
-    k: K,
-  ) -> Box<dyn Future<Item = R, Error = ()> + Send> {
-    if let Some(result) = k(&acc) {
-      Box::new(ok(result))
-    } else {
-      Box::new(stream.into_future().then(|result| match result {
-        Ok((x, s)) => {
-          if let Some(r) = x {
-            acc.push(r);
-            when_rec(s, acc, k)
-          } else {
-            Box::new(err(()))
-          }
-        }
-        Err((_, s)) => when_rec(s, acc, k),
-      }))
-    }
-  }
-
-  when_rec(
-    futures
-      .into_iter()
-      .map(|future| future.into_stream())
-      .fold(Box::new(stream::empty()), |acc, x| Box::new(acc.select(x))),
-    Vec::new(),
-    k,
-  )
-}
-
-// Repeat a future until it succeeds.
-// TODO: Add exponential backoff.
-fn repeat<
-  I: 'static + Send,
-  E: 'static + Send,
-  C: 'static + Send + Fn() -> Box<dyn Future<Item = I, Error = E> + Send>,
->(
-  constructor: C,
-) -> Box<dyn Future<Item = I, Error = E> + Send> {
-  Box::new(constructor().then(move |result| {
-    if let Ok(x) = result {
-      Box::new(ok(x))
-    } else {
-      constructor()
-    }
-  }))
-}
-
-// Send a message to all nodes.
-fn broadcast<
-  P: 'static + Send + Sync + Clone + Serialize,
-  R: 'static + Send + Sync + DeserializeOwned,
->(
-  nodes: &[SocketAddrV4],
-  client: &Client<HttpConnector>,
-  endpoint: &str,
-  payload: P,
-) -> Vec<Box<dyn Future<Item = R, Error = timeout::Error<hyper::Error>> + Send>>
-{
-  nodes
-    .iter()
-    .map(|node| {
-      let node = *node;
-      let client = client.clone();
-      let endpoint = endpoint.to_string();
-      let payload = payload.clone();
-      repeat(move || {
-        Box::new(
-          client
-            .request(
-              Request::builder()
-                .method(Method::POST)
-                .uri(format!("http://{}/{}", node, endpoint))
-                .body(Body::from(bincode::serialize(&payload).unwrap())) // Serialization is safe.
-                .unwrap(), // Safe since we constructed a well-formed request
-            )
-            .and_then(|response| {
-              response.into_body().concat2().map(|body| {
-                bincode::deserialize(
-                  &body.iter().cloned().collect::<Vec<u8>>(),
-                )
-                .unwrap() // Safe under non-Byzantine conditions
-              })
-            })
-            .timeout(REQUEST_TIMEOUT),
-        )
-          as Box<
-            dyn Future<Item = R, Error = timeout::Error<hyper::Error>> + Send,
-          >
-      })
-    })
-    .collect()
-}
+// Duration constants
+const RESTART_DELAY_MIN: Duration = Duration::from_millis(0);
+const RESTART_DELAY_MAX: Duration = Duration::from_millis(100);
 
 pub fn propose(
   client: &Client<HttpConnector>,
   nodes: &[SocketAddrV4],
   node_index: usize,
   value: &str,
-  state: &Arc<RwLock<State>>,
+  state: Arc<RwLock<State>>,
 ) -> Box<dyn Future<Item = (), Error = ()> + Send> {
+  // Clone some data that will outlive this function.
+  let value = value.to_string();
+  let value_for_choose = value.clone();
+  let nodes = nodes.to_vec();
+  let client = client.clone();
+  let nodes = nodes.clone();
+
   // Generate a new proposal number.
   let proposal_number = {
     let mut state_borrow = state.write().unwrap(); // Safe since it can only fail if a panic already happened
-    generate_proposal_number(nodes, node_index, &mut state_borrow)
+    generate_proposal_number(&nodes, node_index, &mut state_borrow)
   };
 
   // Send a prepare message to all the nodes.
+  println!("Preparing this value: {}", value);
   let prepares = broadcast(
-    nodes,
-    client,
-    "prepare",
+    &nodes,
+    &client,
+    PREPARE_ENDPOINT,
     PrepareRequest {
       proposal_number: proposal_number.clone(),
     },
-  )
-  .into_iter()
-  .map(
-    |future: Box<dyn Future<Item = PrepareResponse, Error = _> + Send>| {
-      future.map_err(|_| ())
-    },
-  )
-  .collect::<Vec<_>>();
+  );
 
   // Wait for a majority of the nodes to respond.
-  let majority = prepares.len() / 2 + 1;
-  let value = value.to_string();
+  let majority = nodes.len() / 2 + 1;
   Box::new(
-    when(prepares, move |responses| {
-      // TODO: Check the `min_proposal_number` from the responses.
+    when(prepares, move |responses: &[PrepareResponse]| {
+      // Check if we have a quorum.
       if responses.len() < majority {
-        // We don't have a majority yet. Wait for more responses.
+        // We don't have a quorum yet. Wait for more responses.
         None
       } else {
-        // We have a majority. See if there were any existing proposals.
+        // We have a quorum. See if there were any existing proposals.
         let accepted_proposal = responses
           .iter()
           .filter_map(|response| response.accepted_proposal.clone())
@@ -175,13 +69,70 @@ pub fn propose(
           Some(proposal.1.clone())
         } else {
           // Propose the given value.
-          Some(value.to_string())
+          Some(value.clone())
         }
       }
     })
-    .and_then(|proposal| {
+    .and_then(move |proposal| {
+      // Clone some data that will outlive this function.
+      let proposal_for_choose = proposal.clone();
+
+      // Send an accept message to all the nodes.
       println!("Proposing this value: {}", proposal);
-      ok(())
+      let accepts = broadcast(
+        &nodes,
+        &client,
+        ACCEPT_ENDPOINT,
+        AcceptRequest {
+          proposal: (proposal_number.clone(), proposal),
+        },
+      );
+
+      when(accepts, move |responses: &[AcceptResponse]| {
+        // Check if we have a quorum.
+        if responses.len() < majority {
+          // We don't have a quorum yet. Wait for more responses.
+          None
+        } else {
+          // We have a quorum. Check that there were no rejections.
+          if responses
+            .iter()
+            .all(|response| response.min_proposal_number == proposal_number)
+          {
+            Some(true)
+          } else {
+            Some(false)
+          }
+        }
+      })
+      .and_then(move |succeeded| {
+        if succeeded {
+          // Consensus achieved. Notify all the nodes.
+          Box::new(
+            broadcast(
+              &nodes,
+              &client,
+              CHOOSE_ENDPOINT,
+              ChooseRequest {
+                value: proposal_for_choose,
+              },
+            )
+            .fold((), |_, _: ChooseResponse| ok(())),
+          ) as Box<Future<Item = (), Error = ()> + Send>
+        } else {
+          // Paxos failed. Start over.
+          Box::new(
+            Delay::new(
+              Instant::now()
+                + thread_rng().gen_range(RESTART_DELAY_MIN, RESTART_DELAY_MAX),
+            )
+            .map_err(|_| ())
+            .and_then(move |_| {
+              propose(&client, &nodes, node_index, &value_for_choose, state)
+            }),
+          ) as Box<Future<Item = (), Error = ()> + Send>
+        }
+      })
     }),
   )
 }

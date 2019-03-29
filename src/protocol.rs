@@ -27,6 +27,7 @@ impl Ord for ProposalNumber {
   }
 }
 
+// `Ord` requires `PartialOrd`.
 impl PartialOrd for ProposalNumber {
   fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
     Some(self.cmp(other))
