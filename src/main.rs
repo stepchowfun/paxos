@@ -2,6 +2,7 @@ mod acceptor;
 mod config;
 mod proposer;
 mod protocol;
+mod util;
 
 use clap::{App, Arg};
 use futures::{prelude::*, sync::mpsc};
@@ -29,13 +30,14 @@ const BODY_TIMEOUT: Duration = Duration::from_secs(1);
 // Defaults
 const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
 
-// Command-line options
+// Command-line option names
 const CONFIG_OPTION: &str = "config";
 const IP_OPTION: &str = "ip";
 const NODE_OPTION: &str = "node";
 const PORT_OPTION: &str = "port";
 const PROPOSE_OPTION: &str = "propose";
 
+// This struct represents a summary of the command-line options
 struct Settings {
   nodes: Vec<SocketAddrV4>,
   node_index: usize,
@@ -173,8 +175,8 @@ fn settings() -> Settings {
 fn run(settings: Settings) {
   // Initialize the program state.
   let (quit_sender, quit_receiver) = mpsc::channel(0);
-  let state = Arc::new(RwLock::new(initial_state(quit_sender)));
-  let state_for_proposing = state.clone();
+  let state_for_acceptor = Arc::new(RwLock::new(initial_state(quit_sender)));
+  let state_for_proposer = state_for_acceptor.clone();
 
   // Set up the HTTP server.
   let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
@@ -187,7 +189,7 @@ fn run(settings: Settings) {
       exit(1);
     })
     .serve(move || {
-      let state = state.clone();
+      let state = state_for_acceptor.clone();
       service_fn(
         move |req: Request<Body>| -> Box<
           dyn Future<Item = Response<Body>, Error = timeout::Error<hyper::Error>> + Send,
@@ -217,12 +219,12 @@ fn run(settings: Settings) {
           // Match on the route and handle the request appropriately.
           match (req.method(), req.uri().path()) {
             // RPC calls
-            (&Method::POST, "/prepare") => rpc![prepare],
-            (&Method::POST, "/accept") => rpc![accept],
-            (&Method::POST, "/choose") => rpc![choose],
+            (&Method::POST, acceptor::PREPARE_ENDPOINT) => rpc![prepare],
+            (&Method::POST, acceptor::ACCEPT_ENDPOINT) => rpc![accept],
+            (&Method::POST, acceptor::CHOOSE_ENDPOINT) => rpc![choose],
 
-            // Health check
-            (&Method::GET, "/health") => {
+            // Summary of the program state
+            (&Method::GET, "/") => {
               // Respond with a representation of the program state.
               let state_repr = {
                 let state_borrow: &State = &state.read().unwrap(); // Safe since it can only fail if a panic already happened
@@ -262,7 +264,7 @@ fn run(settings: Settings) {
     .with_graceful_shutdown(
       quit_receiver
         .into_future()
-        .map(|_| eprintln!("Shutting down...")),
+        .map(|_| eprintln!("The server has shut down.")),
     )
     .map_err(|e| eprintln!("Server error: {}", e));
 
@@ -281,7 +283,7 @@ fn run(settings: Settings) {
         &settings.nodes,
         settings.node_index,
         &value,
-        &state_for_proposing,
+        state_for_proposer,
       ));
     }
 

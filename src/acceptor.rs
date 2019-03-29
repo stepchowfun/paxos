@@ -1,6 +1,11 @@
 use crate::protocol::{ProposalNumber, State};
 use serde::{Deserialize, Serialize};
 
+// Endpoints
+pub const PREPARE_ENDPOINT: &str = "/prepare";
+pub const ACCEPT_ENDPOINT: &str = "/accept";
+pub const CHOOSE_ENDPOINT: &str = "/choose";
+
 // BEGIN PREPARE
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -20,6 +25,11 @@ pub fn prepare(
   request: &PrepareRequest,
   state: &mut State,
 ) -> PrepareResponse {
+  println!(
+    "Prepare: {}",
+    serde_yaml::to_string(request).unwrap() // Serialization is safe.
+  );
+
   match &state.min_proposal_number {
     Some(proposal_number) => {
       if request.proposal_number > *proposal_number {
@@ -54,6 +64,10 @@ pub struct AcceptResponse {
 }
 
 pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
+  println!(
+    "Accept: {}",
+    serde_yaml::to_string(request).unwrap() // Serialization is safe.
+  );
   match &state.min_proposal_number {
     Some(proposal_number) => {
       if request.proposal.0 >= *proposal_number {
@@ -87,7 +101,10 @@ pub struct ChooseRequest {
 pub struct ChooseResponse;
 
 pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
-  println!("Consensus achieved: {}", request.value);
+  println!(
+    "Choose: {}",
+    serde_yaml::to_string(request).unwrap() // Serialization is safe.
+  );
   let _ = state.quit_sender.try_send(()); // The first attempt (the only one that matters) should succeed
   ChooseResponse {}
 }
