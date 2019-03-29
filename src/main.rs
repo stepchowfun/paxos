@@ -9,7 +9,7 @@ extern crate log;
 
 use clap::{App, Arg};
 use env_logger::{Builder, Env};
-use futures::{prelude::*, sync::mpsc};
+use futures::prelude::*;
 use hyper::{
   service::service_fn, Body, Client, Method, Request, Response, Server,
   StatusCode,
@@ -172,8 +172,7 @@ fn settings() -> Settings {
 // Run the program.
 fn run(settings: Settings) {
   // Initialize the program state.
-  let (quit_sender, quit_receiver) = mpsc::channel(0);
-  let state_for_acceptor = Arc::new(RwLock::new(initial_state(quit_sender)));
+  let state_for_acceptor = Arc::new(RwLock::new(initial_state()));
   let state_for_proposer = state_for_acceptor.clone();
 
   // Set up the HTTP server.
@@ -259,11 +258,6 @@ fn run(settings: Settings) {
         },
       )
     })
-    .with_graceful_shutdown(
-      quit_receiver
-        .into_future()
-        .map(|_| info!("Server terminated.")),
-    )
     .map_err(|e| error!("Server error: {}", e));
 
   // Set up the HTTP client.
