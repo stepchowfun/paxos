@@ -18,15 +18,14 @@ pub struct PrepareRequest {
 #[serde(deny_unknown_fields)]
 pub struct PrepareResponse {
   pub accepted_proposal: Option<(ProposalNumber, String)>,
-  pub min_proposal_number: ProposalNumber,
 }
 
 pub fn prepare(
   request: &PrepareRequest,
   state: &mut State,
 ) -> PrepareResponse {
-  println!(
-    "Prepare: {}",
+  info!(
+    "Received prepare message:\n{}",
     serde_yaml::to_string(request).unwrap() // Serialization is safe.
   );
 
@@ -37,13 +36,12 @@ pub fn prepare(
       }
     }
     None => {
-      state.min_proposal_number = Some(request.proposal_number.clone()); // [tag:min-proposal-number-exists]
+      state.min_proposal_number = Some(request.proposal_number.clone());
     }
   }
 
   PrepareResponse {
     accepted_proposal: state.accepted_proposal.clone(),
-    min_proposal_number: state.min_proposal_number.clone().unwrap(), // [ref:min-proposal-number-exists]
   }
 }
 
@@ -64,8 +62,8 @@ pub struct AcceptResponse {
 }
 
 pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
-  println!(
-    "Accept: {}",
+  info!(
+    "Received accept message:\n{}",
     serde_yaml::to_string(request).unwrap() // Serialization is safe.
   );
   match &state.min_proposal_number {
@@ -101,10 +99,8 @@ pub struct ChooseRequest {
 pub struct ChooseResponse;
 
 pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
-  println!(
-    "Choose: {}",
-    serde_yaml::to_string(request).unwrap() // Serialization is safe.
-  );
+  info!("Consensus achieved.");
+  println!("{}", request.value);
   let _ = state.quit_sender.try_send(()); // The first attempt (the only one that matters) should succeed
   ChooseResponse {}
 }

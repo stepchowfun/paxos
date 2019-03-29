@@ -6,7 +6,7 @@ An implementation of single-decree Paxos.
 
 ## Installation
 
-You can build and install with [Cargo](https://doc.rust-lang.org/book/second-edition/ch14-04-installing-binaries.html):
+You can build and install the program with [Cargo](https://doc.rust-lang.org/book/second-edition/ch14-04-installing-binaries.html):
 
 ```sh
 cargo install --force --path .
@@ -14,7 +14,21 @@ cargo install --force --path .
 
 You can run that command again to update an existing installation.
 
+## Configuration
+
+By default, the program looks for a configuration file named `config.yml` in the working directory. This file describes the cluster membership. An example configuration is provided in this repository.
+
 ## Usage
+
+For a simple demonstration, run the following commands in separate terminals:
+
+```sh
+paxos --node 0 --propose foo
+paxos --node 1 --propose bar
+paxos --node 2 --propose baz
+```
+
+Here are the full usage instructions:
 
 ```
 USAGE:

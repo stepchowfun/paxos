@@ -6,8 +6,10 @@ edition = "2018"
 
 [dependencies]
 bincode = "1"
+env_logger = "0.6"
 futures = "0.1"
 hyper = "0.12"
+log = "0.4"
 rand = "0.6"
 serde_yaml = "0.8"
 tokio = "0.1"

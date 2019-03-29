@@ -28,7 +28,7 @@ pub fn propose(
 ) -> Box<dyn Future<Item = (), Error = ()> + Send> {
   // Clone some data that will outlive this function.
   let value = value.to_string();
-  let value_for_choose = value.clone();
+  let original_value_for_choose = value.clone();
   let nodes = nodes.to_vec();
   let client = client.clone();
   let nodes = nodes.clone();
@@ -40,7 +40,11 @@ pub fn propose(
   };
 
   // Send a prepare message to all the nodes.
-  println!("Preparing this value: {}", value);
+  info!(
+    "Preparing value `{}` with proposal number:\n{}",
+    value,
+    serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
+  );
   let prepares = broadcast(
     &nodes,
     &client,
@@ -66,25 +70,31 @@ pub fn propose(
           .max_by_key(|accepted_proposal| accepted_proposal.0.clone());
         if let Some(proposal) = accepted_proposal {
           // There was an existing proposal. Use that.
+          info!("Discovered existing value from quorum: {}", proposal.1);
           Some(proposal.1.clone())
         } else {
           // Propose the given value.
+          info!("Quorum replied with no existing value.");
           Some(value.clone())
         }
       }
     })
-    .and_then(move |proposal| {
+    .and_then(move |value| {
       // Clone some data that will outlive this function.
-      let proposal_for_choose = proposal.clone();
+      let value_for_choose = value.clone();
 
       // Send an accept message to all the nodes.
-      println!("Proposing this value: {}", proposal);
+      info!(
+        "Requesting acceptance of value `{}` with proposal number:\n{}",
+        value,
+        serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
+      );
       let accepts = broadcast(
         &nodes,
         &client,
         ACCEPT_ENDPOINT,
         AcceptRequest {
-          proposal: (proposal_number.clone(), proposal),
+          proposal: (proposal_number.clone(), value),
         },
       );
 
@@ -108,19 +118,22 @@ pub fn propose(
       .and_then(move |succeeded| {
         if succeeded {
           // Consensus achieved. Notify all the nodes.
+          info!("Consensus achieved. Notifying all the nodes.");
           Box::new(
             broadcast(
               &nodes,
               &client,
               CHOOSE_ENDPOINT,
               ChooseRequest {
-                value: proposal_for_choose,
+                value: value_for_choose,
               },
             )
-            .fold((), |_, _: ChooseResponse| ok(())),
+            .fold((), |_, _: ChooseResponse| ok(()))
+            .map(|_| info!("All nodes notified.")),
           ) as Box<Future<Item = (), Error = ()> + Send>
         } else {
           // Paxos failed. Start over.
+          info!("Failed to reach consensus. Starting over.");
           Box::new(
             Delay::new(
               Instant::now()
@@ -128,7 +141,13 @@ pub fn propose(
             )
             .map_err(|_| ())
             .and_then(move |_| {
-              propose(&client, &nodes, node_index, &value_for_choose, state)
+              propose(
+                &client,
+                &nodes,
+                node_index,
+                &original_value_for_choose,
+                state,
+              )
             }),
           ) as Box<Future<Item = (), Error = ()> + Send>
         }

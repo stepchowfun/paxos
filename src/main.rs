@@ -4,7 +4,11 @@ mod proposer;
 mod protocol;
 mod util;
 
+#[macro_use]
+extern crate log;
+
 use clap::{App, Arg};
+use env_logger::{Builder, Env};
 use futures::{prelude::*, sync::mpsc};
 use hyper::{
   service::service_fn, Body, Client, Method, Request, Response, Server,
@@ -111,15 +115,12 @@ fn settings() -> Settings {
 
   // Parse the config file.
   let config_data = fs::read_to_string(config_file_path).unwrap_or_else(|e| {
-    eprintln!(
-      "Error: Unable to read file `{}`. Reason: {}",
-      config_file_path, e
-    );
+    error!("Unable to read file `{}`. Reason: {}", config_file_path, e);
     exit(1);
   });
   let config = config::parse(&config_data).unwrap_or_else(|e| {
-    eprintln!(
-      "Error: Unable to parse file `{}`. Reason: {}.",
+    error!(
+      "Unable to parse file `{}`. Reason: {}.",
       config_file_path, e
     );
     exit(1);
@@ -128,14 +129,11 @@ fn settings() -> Settings {
   // Parse the node index.
   let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required]
   let node_index: usize = node_repr.parse().unwrap_or_else(|e| {
-    eprintln!(
-      "Error: `{}` is not a valid node index. Reason: {}",
-      node_repr, e
-    );
+    error!("`{}` is not a valid node index. Reason: {}", node_repr, e);
     exit(1);
   });
   if node_index >= config.nodes.len() {
-    eprintln!("Error: There is no node with index {}.", node_repr);
+    error!("There is no node with index {}.", node_repr);
     exit(1); // [tag:node-index-valid]
   }
 
@@ -144,7 +142,7 @@ fn settings() -> Settings {
     || *config.nodes[node_index].ip(), // [ref:node-index-valid]
     |x| {
       x.parse().unwrap_or_else(|e| {
-        eprintln!("Error: `{}` is not a valid IP address. Reason: {}", x, e);
+        error!("`{}` is not a valid IP address. Reason: {}", x, e);
         exit(1);
       })
     },
@@ -155,7 +153,7 @@ fn settings() -> Settings {
     || config.nodes[node_index].port(), // [ref:node-index-valid]
     |x| {
       x.parse().unwrap_or_else(|e| {
-        eprintln!("Error: `{}` is not a valid port number. Reason: {}", x, e);
+        error!("`{}` is not a valid port number. Reason: {}", x, e);
         exit(1);
       })
     },
@@ -182,8 +180,8 @@ fn run(settings: Settings) {
   let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
   let server = Server::try_bind(&address)
     .unwrap_or_else(|e| {
-      eprintln!(
-        "Error: Unable to bind to address `{}`. Reason: {}",
+      error!(
+        "Unable to bind to address `{}`. Reason: {}",
         address, e
       );
       exit(1);
@@ -264,9 +262,9 @@ fn run(settings: Settings) {
     .with_graceful_shutdown(
       quit_receiver
         .into_future()
-        .map(|_| eprintln!("The server has shut down.")),
+        .map(|_| info!("Server terminated.")),
     )
-    .map_err(|e| eprintln!("Server error: {}", e));
+    .map_err(|e| error!("Server error: {}", e));
 
   // Set up the HTTP client.
   let client = Client::new();
@@ -288,7 +286,7 @@ fn run(settings: Settings) {
     }
 
     // Tell the user that the server is running.
-    println!("Listening on http://{}.", address);
+    info!("Listening on http://{}.", address);
 
     // Return control back to the runtime.
     Ok(())
@@ -297,5 +295,15 @@ fn run(settings: Settings) {
 
 // Let the fun begin!
 fn main() {
+  // Set up the logger.
+  Builder::from_env(
+    Env::default().filter("LOG_LEVEL").write_style("LOG_STYLE"),
+  )
+  .format(|buf, record| {
+    writeln!(buf, "[{}] {}", record.level(), record.args())
+  })
+  .init();
+
+  // Run Paxos!
   run(settings());
 }
