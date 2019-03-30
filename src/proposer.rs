@@ -3,7 +3,7 @@ use crate::acceptor::{
   PrepareRequest, PrepareResponse, ACCEPT_ENDPOINT, CHOOSE_ENDPOINT,
   PREPARE_ENDPOINT,
 };
-use crate::protocol::{generate_proposal_number, State};
+use crate::state::{ProposalNumber, State};
 use crate::util::{broadcast, when};
 use futures::{future::ok, prelude::*};
 use hyper::{client::HttpConnector, Client};
@@ -18,6 +18,21 @@ use tokio::timer::Delay;
 // Duration constants
 const RESTART_DELAY_MIN: Duration = Duration::from_millis(0);
 const RESTART_DELAY_MAX: Duration = Duration::from_millis(100);
+
+// This function generates a new proposal number.
+fn generate_proposal_number(
+  nodes: &[SocketAddrV4],
+  node_index: usize,
+  state: &mut State,
+) -> ProposalNumber {
+  let proposal_number = ProposalNumber {
+    round: state.next_round,
+    proposer_ip: u32::from(*nodes[node_index].ip()),
+    proposer_port: nodes[node_index].port(),
+  };
+  state.next_round += 1;
+  proposal_number
+}
 
 pub fn propose(
   client: &Client<HttpConnector>,
@@ -157,4 +172,30 @@ pub fn propose(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+  use crate::proposer::generate_proposal_number;
+  use crate::state::initial;
+  use std::net::{Ipv4Addr, SocketAddrV4};
+
+  #[test]
+  fn first_proposal_number() {
+    let mut state = initial();
+    let address0 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000);
+    let address1 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 2), 3001);
+    let address2 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 3), 3002);
+    let nodes = vec![address0, address1, address2];
+    let pn = generate_proposal_number(&nodes, 1, &mut state);
+    assert_eq!(pn.round, 0);
+    assert_eq!(pn.proposer_ip, u32::from(*address1.ip()));
+    assert_eq!(pn.proposer_port, address1.port());
+  }
+
+  #[test]
+  fn second_proposal_number() {
+    let mut state = initial();
+    let nodes = vec![SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000)];
+    let pn0 = generate_proposal_number(&nodes, 0, &mut state);
+    let pn1 = generate_proposal_number(&nodes, 0, &mut state);
+    assert!(pn1 > pn0);
+  }
+}

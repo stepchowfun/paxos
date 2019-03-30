@@ -1,4 +1,4 @@
-use crate::protocol::{ProposalNumber, State};
+use crate::state::{ProposalNumber, State};
 use serde::{Deserialize, Serialize};
 
 // Endpoints
@@ -111,11 +111,11 @@ mod tests {
   use crate::acceptor::{
     accept, choose, prepare, AcceptRequest, ChooseRequest, PrepareRequest,
   };
-  use crate::protocol::{initial_state, ProposalNumber};
+  use crate::state::{initial, ProposalNumber};
 
   #[test]
   fn prepare_initializes_min_proposal_number() {
-    let mut state = initial_state();
+    let mut state = initial();
     let request = PrepareRequest {
       proposal_number: ProposalNumber {
         round: 0,
@@ -130,7 +130,7 @@ mod tests {
 
   #[test]
   fn prepare_increases_min_proposal_number() {
-    let mut state = initial_state();
+    let mut state = initial();
     state.min_proposal_number = Some(ProposalNumber {
       round: 0,
       proposer_ip: 0,
@@ -150,7 +150,7 @@ mod tests {
 
   #[test]
   fn prepare_does_not_decrease_min_proposal_number() {
-    let mut state = initial_state();
+    let mut state = initial();
     state.min_proposal_number = Some(ProposalNumber {
       round: 1,
       proposer_ip: 0,
@@ -170,7 +170,7 @@ mod tests {
 
   #[test]
   fn prepare_returns_accepted_proposal() {
-    let mut state = initial_state();
+    let mut state = initial();
     let accepted_proposal = (
       ProposalNumber {
         round: 0,
@@ -194,7 +194,7 @@ mod tests {
 
   #[test]
   fn accept_success() {
-    let mut state = initial_state();
+    let mut state = initial();
     let proposal = (
       ProposalNumber {
         round: 0,
@@ -221,7 +221,7 @@ mod tests {
 
   #[test]
   fn accept_failure() {
-    let mut state = initial_state();
+    let mut state = initial();
     let proposal0 = (
       ProposalNumber {
         round: 0,
@@ -262,7 +262,7 @@ mod tests {
 
   #[test]
   fn choose_updates_state() {
-    let mut state = initial_state();
+    let mut state = initial();
     let request = ChooseRequest {
       value: "foo".to_string(),
     };

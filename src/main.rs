@@ -1,7 +1,7 @@
 mod acceptor;
 mod config;
 mod proposer;
-mod protocol;
+mod state;
 mod util;
 
 #[macro_use]
@@ -15,7 +15,7 @@ use hyper::{
   StatusCode,
 };
 use proposer::propose;
-use protocol::{initial_state, State};
+use state::{initial, State};
 use std::{
   fs,
   net::{Ipv4Addr, SocketAddr, SocketAddrV4},
@@ -168,7 +168,7 @@ fn settings() -> Settings {
 // Run the program.
 fn run(settings: Settings) {
   // Initialize the program state.
-  let state_for_acceptor = Arc::new(RwLock::new(initial_state()));
+  let state_for_acceptor = Arc::new(RwLock::new(initial()));
   let state_for_proposer = state_for_acceptor.clone();
 
   // Set up the HTTP server.
