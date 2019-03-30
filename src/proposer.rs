@@ -35,7 +35,8 @@ pub fn propose(
 
   // Generate a new proposal number.
   let proposal_number = {
-    let mut state_borrow = state.write().unwrap(); // Safe since it can only fail if a panic already happened
+    // The `unwrap` is safe since it can only fail if a panic already happened.
+    let mut state_borrow = state.write().unwrap();
     generate_proposal_number(&nodes, node_index, &mut state_borrow)
   };
 
@@ -49,9 +50,7 @@ pub fn propose(
     &nodes,
     &client,
     PREPARE_ENDPOINT,
-    PrepareRequest {
-      proposal_number: proposal_number.clone(),
-    },
+    PrepareRequest { proposal_number },
   );
 
   // Wait for a majority of the nodes to respond.
@@ -67,11 +66,11 @@ pub fn propose(
         let accepted_proposal = responses
           .iter()
           .filter_map(|response| response.accepted_proposal.clone())
-          .max_by_key(|accepted_proposal| accepted_proposal.0.clone());
+          .max_by_key(|accepted_proposal| accepted_proposal.0);
         if let Some(proposal) = accepted_proposal {
           // There was an existing proposal. Use that.
           info!("Discovered existing value from quorum: {}", proposal.1);
-          Some(proposal.1.clone())
+          Some(proposal.1)
         } else {
           // Propose the given value.
           info!("Quorum replied with no existing value.");
@@ -87,14 +86,15 @@ pub fn propose(
       info!(
         "Requesting acceptance of value `{}` with proposal number:\n{}",
         value,
-        serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
+        // The `unwrap` is safe because serialization should never fail.
+        serde_yaml::to_string(&proposal_number).unwrap()
       );
       let accepts = broadcast(
         &nodes,
         &client,
         ACCEPT_ENDPOINT,
         AcceptRequest {
-          proposal: (proposal_number.clone(), value),
+          proposal: (proposal_number, value),
         },
       );
 

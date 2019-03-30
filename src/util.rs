@@ -73,7 +73,11 @@ pub fn broadcast<
               Request::builder()
                 .method(Method::POST)
                 .uri(format!("http://{}{}", node, endpoint))
-                .body(Body::from(bincode::serialize(&payload).unwrap())) // Serialization is safe.
+                .body(Body::from(
+                  // The `unwrap` is safe because serialization should never
+                  // fail.
+                  bincode::serialize(&payload).unwrap(),
+                ))
                 .unwrap(), // Safe since we constructed a well-formed request
             )
             .and_then(|response| {
