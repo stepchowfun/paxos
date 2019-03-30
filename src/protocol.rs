@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, net::SocketAddrV4};
 
 // A representation of a proposal number
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProposalNumber {
   pub round: u64,
@@ -76,74 +76,74 @@ mod tests {
 
   #[test]
   fn proposal_ord_round() {
-    let pn1 = ProposalNumber {
+    let pn0 = ProposalNumber {
       round: 0,
       proposer_ip: 1,
       proposer_port: 1,
     };
 
-    let pn2 = ProposalNumber {
+    let pn1 = ProposalNumber {
       round: 1,
       proposer_ip: 0,
       proposer_port: 0,
     };
 
-    assert!(pn2 > pn1);
+    assert!(pn1 > pn0);
   }
 
   #[test]
   fn proposal_ord_proposer_ip() {
-    let pn1 = ProposalNumber {
+    let pn0 = ProposalNumber {
       round: 0,
       proposer_ip: 0,
       proposer_port: 1,
     };
 
-    let pn2 = ProposalNumber {
+    let pn1 = ProposalNumber {
       round: 0,
       proposer_ip: 1,
       proposer_port: 0,
     };
 
-    assert!(pn2 > pn1);
+    assert!(pn1 > pn0);
   }
 
   #[test]
   fn proposal_ord_proposer_port() {
-    let pn1 = ProposalNumber {
+    let pn0 = ProposalNumber {
       round: 0,
       proposer_ip: 0,
       proposer_port: 0,
     };
 
-    let pn2 = ProposalNumber {
+    let pn1 = ProposalNumber {
       round: 0,
       proposer_ip: 0,
       proposer_port: 1,
     };
 
-    assert!(pn2 > pn1);
+    assert!(pn1 > pn0);
   }
 
   #[test]
   fn first_proposal_number() {
     let mut state = initial_state();
-    let address1 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000);
-    let address2 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 2), 3001);
-    let address3 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 3), 3002);
-    let nodes = vec![address1, address2, address3];
+    let address0 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000);
+    let address1 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 2), 3001);
+    let address2 = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 3), 3002);
+    let nodes = vec![address0, address1, address2];
     let pn = generate_proposal_number(&nodes, 1, &mut state);
     assert_eq!(pn.round, 0);
-    assert_eq!(pn.proposer_ip, u32::from(*address2.ip()));
-    assert_eq!(pn.proposer_port, address2.port());
+    assert_eq!(pn.proposer_ip, u32::from(*address1.ip()));
+    assert_eq!(pn.proposer_port, address1.port());
   }
 
   #[test]
   fn second_proposal_number() {
     let mut state = initial_state();
     let nodes = vec![SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000)];
+    let pn0 = generate_proposal_number(&nodes, 0, &mut state);
     let pn1 = generate_proposal_number(&nodes, 0, &mut state);
-    let pn2 = generate_proposal_number(&nodes, 0, &mut state);
-    assert!(pn2 > pn1);
+    assert!(pn1 > pn0);
   }
 }

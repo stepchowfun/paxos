@@ -50,9 +50,7 @@ pub fn propose(
     &nodes,
     &client,
     PREPARE_ENDPOINT,
-    PrepareRequest {
-      proposal_number: proposal_number.clone(),
-    },
+    PrepareRequest { proposal_number },
   );
 
   // Wait for a majority of the nodes to respond.
@@ -68,11 +66,11 @@ pub fn propose(
         let accepted_proposal = responses
           .iter()
           .filter_map(|response| response.accepted_proposal.clone())
-          .max_by_key(|accepted_proposal| accepted_proposal.0.clone());
+          .max_by_key(|accepted_proposal| accepted_proposal.0);
         if let Some(proposal) = accepted_proposal {
           // There was an existing proposal. Use that.
           info!("Discovered existing value from quorum: {}", proposal.1);
-          Some(proposal.1.clone())
+          Some(proposal.1)
         } else {
           // Propose the given value.
           info!("Quorum replied with no existing value.");
@@ -96,7 +94,7 @@ pub fn propose(
         &client,
         ACCEPT_ENDPOINT,
         AcceptRequest {
-          proposal: (proposal_number.clone(), value),
+          proposal: (proposal_number, value),
         },
       );
 
