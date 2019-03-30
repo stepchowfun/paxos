@@ -80,7 +80,8 @@ pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
   }
 
   AcceptResponse {
-    min_proposal_number: state.min_proposal_number.clone().unwrap(), // Safe since accepts must follow at least one prepare
+     // The `unwrap` is safe since accepts must follow at least one prepare.
+    min_proposal_number: state.min_proposal_number.clone().unwrap(),
   }
 }
 

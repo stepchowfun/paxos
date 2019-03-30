@@ -35,7 +35,8 @@ pub fn propose(
 
   // Generate a new proposal number.
   let proposal_number = {
-    let mut state_borrow = state.write().unwrap(); // Safe since it can only fail if a panic already happened
+    // The `unwrap` is safe since it can only fail if a panic already happened.
+    let mut state_borrow = state.write().unwrap();
     generate_proposal_number(&nodes, node_index, &mut state_borrow)
   };
 
@@ -87,7 +88,8 @@ pub fn propose(
       info!(
         "Requesting acceptance of value `{}` with proposal number:\n{}",
         value,
-        serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
+        // The `unwrap` is safe because serialization should never fail.
+        serde_yaml::to_string(&proposal_number).unwrap()
       );
       let accepts = broadcast(
         &nodes,

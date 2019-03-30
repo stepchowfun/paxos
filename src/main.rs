@@ -71,9 +71,7 @@ fn settings() -> Settings {
         .short("v")
         .long(PROPOSE_OPTION)
         .value_name("VALUE")
-        .help(
-          "Proposes a value to the cluster",
-        )
+        .help("Proposes a value to the cluster")
         .takes_value(true),
     )
     .arg(
@@ -81,9 +79,7 @@ fn settings() -> Settings {
         .short("c")
         .long(CONFIG_OPTION)
         .value_name("PATH")
-        .help(
-          "Sets the path of the config file (default: config.yml)",
-        )
+        .help("Sets the path of the config file (default: config.yml)")
         .takes_value(true),
     )
     .arg(
@@ -92,7 +88,8 @@ fn settings() -> Settings {
         .long(IP_OPTION)
         .value_name("ADDRESS")
         .help(
-          "Sets the IP address to run on (if different from the configuration)",
+          "Sets the IP address to run on \
+           (if different from the configuration)",
         )
         .takes_value(true),
     )
@@ -101,9 +98,7 @@ fn settings() -> Settings {
         .short("p")
         .long(PORT_OPTION)
         .value_name("PORT")
-        .help(
-          "Sets the port to run on (if different from the configuration)",
-        )
+        .help("Sets the port to run on (if different from the configuration)")
         .takes_value(true),
     )
     .get_matches();
@@ -127,7 +122,8 @@ fn settings() -> Settings {
   });
 
   // Parse the node index.
-  let node_repr = matches.value_of(NODE_OPTION).unwrap(); // [ref:node-required]
+  // The unwrap is safe due to [ref:node-required].
+  let node_repr = matches.value_of(NODE_OPTION).unwrap();
   let node_index: usize = node_repr.parse().unwrap_or_else(|e| {
     error!("`{}` is not a valid node index. Reason: {}", node_repr, e);
     exit(1);
@@ -179,17 +175,17 @@ fn run(settings: Settings) {
   let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
   let server = Server::try_bind(&address)
     .unwrap_or_else(|e| {
-      error!(
-        "Unable to bind to address `{}`. Reason: {}",
-        address, e
-      );
+      error!("Unable to bind to address `{}`. Reason: {}", address, e);
       exit(1);
     })
     .serve(move || {
       let state = state_for_acceptor.clone();
       service_fn(
         move |req: Request<Body>| -> Box<
-          dyn Future<Item = Response<Body>, Error = timeout::Error<hyper::Error>> + Send,
+          dyn Future<
+              Item = Response<Body>,
+              Error = timeout::Error<hyper::Error>,
+            > + Send,
         > {
           let state = state.clone();
 
@@ -198,19 +194,24 @@ fn run(settings: Settings) {
           // could have been implemented as a function.
           macro_rules! rpc {
             ($x:ident) => {
-              Box::new(req.into_body().concat2().timeout(BODY_TIMEOUT).map(move |chunk| {
-                let state = state.clone();
-                let body = chunk.iter().cloned().collect::<Vec<u8>>();
-                let payload = bincode::deserialize(&body).unwrap(); // Safe under non-Byzantine conditions
-                let response = {
-                  let mut state_borrow = state.write().unwrap(); // Safe since it can only fail if a panic already happened
-                  acceptor::$x(&payload, &mut state_borrow)
-                };
-                Response::new(Body::from(
-                  bincode::serialize(&response).unwrap(),
-                ))
-              }))
-            }
+              Box::new(req.into_body().concat2().timeout(BODY_TIMEOUT).map(
+                move |chunk| {
+                  let state = state.clone();
+                  let body = chunk.iter().cloned().collect::<Vec<u8>>();
+                  // The `unwrap` is safe under non-Byzantine conditions
+                  let payload = bincode::deserialize(&body).unwrap();
+                  let response = {
+                    // The `unwrap` is safe since it can only fail if a panic
+                    // already happened.
+                    let mut state_borrow = state.write().unwrap();
+                    acceptor::$x(&payload, &mut state_borrow)
+                  };
+                  Response::new(Body::from(
+                    bincode::serialize(&response).unwrap(),
+                  ))
+                },
+              ))
+            };
           }
 
           // Match on the route and handle the request appropriately.
@@ -224,8 +225,12 @@ fn run(settings: Settings) {
             (&Method::GET, "/") => {
               // Respond with a representation of the program state.
               let state_repr = {
-                let state_borrow: &State = &state.read().unwrap(); // Safe since it can only fail if a panic already happened
-                serde_yaml::to_string(state_borrow).unwrap() // Serialization is safe.
+                // The `unwrap` is safe since it can only fail if a panic
+                // already happened.
+                let state_borrow: &State = &state.read().unwrap();
+                // The `unwrap` is safe because serialization should never
+                // fail.
+                serde_yaml::to_string(state_borrow).unwrap()
               };
               Box::new(future::ok(Response::new(Body::from(format!(
                 "System operational.\n\n{}",
@@ -240,7 +245,9 @@ fn run(settings: Settings) {
                 Response::builder()
                   .header(hyper::header::CONTENT_TYPE, "image/x-icon")
                   .body(Body::from(FAVICON_DATA))
-                  .unwrap(), // Safe since we constructed a well-formed response
+                  // The `unwrap` is safe since we constructed a well-formed
+                  // response.
+                  .unwrap(),
               ))
             }
 
@@ -251,7 +258,9 @@ fn run(settings: Settings) {
                 Response::builder()
                   .status(StatusCode::NOT_FOUND)
                   .body(Body::from("Not found."))
-                  .unwrap(), // Safe since we constructed a well-formed response
+                  // The `unwrap` is safe since we constructed a well-formed
+                  // response.
+                  .unwrap(),
               ))
             }
           }
