@@ -95,7 +95,9 @@ pub fn read(
 
   // Do the read.
   fs::read(path).and_then(move |data| {
+    // The `unwrap` is safe since it can only fail if a panic already happened.
     let mut state_borrow = state.write().unwrap();
+
     bincode::deserialize(&data).ok().map_or_else(
       || {
         err(Error::new(
