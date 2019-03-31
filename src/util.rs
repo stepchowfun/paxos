@@ -9,8 +9,7 @@ use std::{
   cmp::min,
   time::{Duration, Instant},
 };
-use tokio::prelude::*;
-use tokio::timer::Delay;
+use tokio::{fs::file::File, io::Error, prelude::*, timer::Delay};
 
 // Duration constants
 const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(100);
@@ -134,4 +133,22 @@ pub fn when<
   }
 
   when_rec(stream, Vec::new(), k)
+}
+
+// The following provides fsync functionality in the form of a future.
+pub struct FSyncFuture {
+  pub file: File,
+}
+
+impl Future for FSyncFuture {
+  type Item = ();
+  type Error = Error;
+
+  fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    self.file.poll_sync_all()
+  }
+}
+
+pub fn fsync(file: File) -> FSyncFuture {
+  FSyncFuture { file: file }
 }

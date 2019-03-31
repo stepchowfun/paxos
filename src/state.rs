@@ -1,3 +1,4 @@
+use crate::util::fsync;
 use futures::{
   future::{err, ok},
   prelude::*,
@@ -5,11 +6,11 @@ use futures::{
 use serde::{Deserialize, Serialize};
 use std::{
   cmp::Ordering,
-  io,
+  io::{Error, ErrorKind::InvalidData},
   path::Path,
   sync::{Arc, RwLock},
 };
-use tokio::fs;
+use tokio::{fs, fs::File};
 
 // A representation of a proposal number
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -66,7 +67,7 @@ pub fn initial() -> State {
 pub fn write(
   state: &State,
   path: &Path,
-) -> impl Future<Item = (), Error = io::Error> {
+) -> impl Future<Item = (), Error = Error> {
   // Clone some data that will outlive this function.
   let path = path.to_owned();
 
@@ -77,16 +78,18 @@ pub fn write(
   let parent = path.parent().unwrap().to_owned();
 
   // Create the directories if necessary and write the file.
-  fs::create_dir_all(parent)
-    .and_then(|_| fs::write(path, payload))
-    .map(|_| ())
+  fs::create_dir_all(parent).and_then(move |_| {
+    File::create(path).and_then(move |file| {
+      tokio::io::write_all(file, payload).and_then(|(file, _)| fsync(file))
+    })
+  })
 }
 
 // Read the state from a file.
 pub fn read(
   state: Arc<RwLock<State>>,
   path: &Path,
-) -> impl Future<Item = (), Error = io::Error> {
+) -> impl Future<Item = (), Error = Error> {
   // Clone some data that will outlive this function.
   let path = path.to_owned();
 
@@ -95,8 +98,8 @@ pub fn read(
     let mut state_borrow = state.write().unwrap();
     bincode::deserialize(&data).ok().map_or_else(
       || {
-        err(io::Error::new(
-          io::ErrorKind::InvalidData,
+        err(Error::new(
+          InvalidData,
           "Unable to deserialize the persisted state.",
         ))
       },

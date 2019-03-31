@@ -11,13 +11,14 @@ use clap::{App, Arg};
 use env_logger::{Builder, Env};
 use futures::{future::ok, prelude::*};
 use hyper::{
-  service::service_fn, Body, Client, Method, Request, Response, Server,
-  StatusCode,
+  header::CONTENT_TYPE, service::service_fn, Body, Client, Method, Request,
+  Response, Server, StatusCode,
 };
 use proposer::propose;
 use state::{initial, State};
 use std::{
-  error, fs,
+  error::Error,
+  fs,
   net::{Ipv4Addr, SocketAddr, SocketAddrV4},
   path::{Path, PathBuf},
   process::exit,
@@ -231,7 +232,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
             move |req: Request<Body>| -> Box<
               dyn Future<
                   Item = Response<Body>,
-                  Error = Box<dyn error::Error + Send + Sync>,
+                  Error = Box<dyn Error + Send + Sync>,
                 > + Send,
             > {
               let state_for_request = state.clone();
@@ -258,7 +259,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                       acceptor::$x(&payload, &mut state_borrow)
                     }
                   ).map_err(|e|
-                    Box::new(e) as Box<dyn error::Error + Send + Sync>
+                    Box::new(e) as Box<dyn Error + Send + Sync>
                   ).and_then(move |response| {
                     let state = state_for_write.clone();
                     let settings = settings.clone();
@@ -270,7 +271,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                     state::write(&state_borrow, &settings.data_file_path)
                       .map(|_| response)
                       .map_err(|e|
-                        Box::new(e) as Box<dyn error::Error + Send + Sync>
+                        Box::new(e) as Box<dyn Error + Send + Sync>
                       )
                   }).map(|response|
                     Response::new(Body::from(
@@ -312,7 +313,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                   // Respond with the favicon.
                   Box::new(ok(
                     Response::builder()
-                      .header(hyper::header::CONTENT_TYPE, "image/x-icon")
+                      .header(CONTENT_TYPE, "image/x-icon")
                       .body(Body::from(FAVICON_DATA))
                       // The `unwrap` is safe since we constructed a
                       // well-formed response.
