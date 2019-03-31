@@ -6,8 +6,6 @@ pub const PREPARE_ENDPOINT: &str = "/prepare";
 pub const ACCEPT_ENDPOINT: &str = "/accept";
 pub const CHOOSE_ENDPOINT: &str = "/choose";
 
-// BEGIN PREPARE
-
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareRequest {
@@ -19,6 +17,28 @@ pub struct PrepareRequest {
 pub struct PrepareResponse {
   pub accepted_proposal: Option<(ProposalNumber, String)>,
 }
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptRequest {
+  pub proposal: (ProposalNumber, String),
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptResponse {
+  pub min_proposal_number: ProposalNumber,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChooseRequest {
+  pub value: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChooseResponse;
 
 pub fn prepare(
   request: &PrepareRequest,
@@ -45,22 +65,6 @@ pub fn prepare(
   }
 }
 
-// END PREPARE
-
-// BEGIN ACCEPT
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptRequest {
-  pub proposal: (ProposalNumber, String),
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptResponse {
-  pub min_proposal_number: ProposalNumber,
-}
-
 pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
   info!(
     "Received accept message:\n{}",
@@ -81,20 +85,6 @@ pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
   }
 }
 
-// END ACCEPT
-
-// BEGIN CHOOSE
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChooseRequest {
-  pub value: String,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChooseResponse;
-
 pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
   info!("Consensus achieved.");
   if state.chosen_value.is_none() {
@@ -103,8 +93,6 @@ pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
   }
   ChooseResponse {}
 }
-
-// END CHOOSE
 
 #[cfg(test)]
 mod tests {
