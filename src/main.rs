@@ -243,46 +243,46 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
               // below. If Rust had higher-ranked types or let polymorphism,
               // this could have been implemented as a function.
               macro_rules! rpc {
-              ($x:ident) => {
-                Box::new(
-                  req.into_body().concat2().timeout(BODY_TIMEOUT).map(
-                    move |chunk| {
-                      let state = state_for_request.clone();
+                ($x:ident) => {
+                  Box::new(
+                    req.into_body().concat2().timeout(BODY_TIMEOUT).map(
+                      move |chunk| {
+                        let state = state_for_request.clone();
+                        let body = chunk.iter().cloned().collect::<Vec<u8>>();
 
-                      let body = chunk.iter().cloned().collect::<Vec<u8>>();
-                      // The `unwrap` is safe under non-Byzantine conditions
-                      let payload = bincode::deserialize(&body).unwrap();
+                        // The `unwrap` is safe under non-Byzantine conditions
+                        let payload = bincode::deserialize(&body).unwrap();
+
+                        // The `unwrap` is safe since it can only fail if a
+                        // panic already happened.
+                        let mut state_borrow = state.write().unwrap();
+                        acceptor::$x(&payload, &mut state_borrow)
+                      }
+                    ).map_err(|e|
+                      Box::new(e) as Box<dyn Error + Send + Sync>
+                    ).and_then(move |response| {
+                      let state = state_for_write.clone();
+                      let settings = settings.clone();
 
                       // The `unwrap` is safe since it can only fail if a panic
                       // already happened.
-                      let mut state_borrow = state.write().unwrap();
-                      acceptor::$x(&payload, &mut state_borrow)
-                    }
-                  ).map_err(|e|
-                    Box::new(e) as Box<dyn Error + Send + Sync>
-                  ).and_then(move |response| {
-                    let state = state_for_write.clone();
-                    let settings = settings.clone();
+                      let state_borrow = state.read().unwrap();
 
-                    // The `unwrap` is safe since it can only fail if a panic
-                    // already happened.
-                    let state_borrow = state.read().unwrap();
-
-                    state::write(&state_borrow, &settings.data_file_path)
-                      .map(|_| response)
-                      .map_err(|e|
-                        Box::new(e) as Box<dyn Error + Send + Sync>
-                      )
-                  }).map(|response|
-                    Response::new(Body::from(
-                      // The `unwrap` is safe because serialization should
-                      // never fail.
-                      bincode::serialize(&response).unwrap(),
-                    ))
+                      state::write(&state_borrow, &settings.data_file_path)
+                        .map(|_| response)
+                        .map_err(|e|
+                          Box::new(e) as Box<dyn Error + Send + Sync>
+                        )
+                    }).map(|response|
+                      Response::new(Body::from(
+                        // The `unwrap` is safe because serialization should
+                        // never fail.
+                        bincode::serialize(&response).unwrap(),
+                      ))
+                    )
                   )
-                )
-              };
-            }
+                };
+              }
 
               // Match on the route and handle the request appropriately.
               match (req.method(), req.uri().path()) {
@@ -297,6 +297,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                   let state_repr = {
                     // The `unwrap` is safe since it can only fail if a panic
                     // already happened.
+
                     let state_borrow: &State = &state.read().unwrap();
                     // The `unwrap` is safe because serialization should never
                     // fail.
