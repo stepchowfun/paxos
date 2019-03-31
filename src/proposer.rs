@@ -75,7 +75,8 @@ pub fn propose(
     info!(
       "Preparing value `{}` with proposal number:\n{}",
       value,
-      serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
+      // Serialization is safe.
+      serde_yaml::to_string(&proposal_number).unwrap()
     );
     let prepares: Box<dyn Stream<Item = PrepareResponse, Error = ()> + Send> =
       broadcast(
