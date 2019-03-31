@@ -9,7 +9,7 @@ extern crate log;
 
 use clap::{App, Arg};
 use env_logger::{Builder, Env};
-use futures::prelude::*;
+use futures::{future::ok, prelude::*};
 use hyper::{
   service::service_fn, Body, Client, Method, Request, Response, Server,
   StatusCode,
@@ -17,13 +17,14 @@ use hyper::{
 use proposer::propose;
 use state::{initial, State};
 use std::{
-  fs,
+  error, fs,
   net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+  path::{Path, PathBuf},
   process::exit,
   sync::{Arc, RwLock},
   time::Duration,
 };
-use tokio::{prelude::*, timer::timeout};
+use tokio::prelude::*;
 
 // We embed the favicon directly into the compiled binary.
 const FAVICON_DATA: &[u8] = include_bytes!("../resources/favicon.ico");
@@ -33,21 +34,25 @@ const BODY_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Defaults
 const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
+const DATA_DIR_DEFAULT_PATH: &str = "data";
 
 // Command-line option names
-const CONFIG_OPTION: &str = "config";
+const CONFIG_FILE_OPTION: &str = "config-file";
+const DATA_DIR_OPTION: &str = "data-dir";
 const IP_OPTION: &str = "ip";
 const NODE_OPTION: &str = "node";
 const PORT_OPTION: &str = "port";
 const PROPOSE_OPTION: &str = "propose";
 
 // This struct represents a summary of the command-line options
+#[derive(Clone)]
 struct Settings {
   nodes: Vec<SocketAddrV4>,
   node_index: usize,
   ip: Ipv4Addr,
   port: u16,
   proposal: Option<String>,
+  data_file_path: PathBuf,
 }
 
 // Parse the command-line options.
@@ -75,11 +80,19 @@ fn settings() -> Settings {
         .takes_value(true),
     )
     .arg(
-      Arg::with_name(CONFIG_OPTION)
+      Arg::with_name(CONFIG_FILE_OPTION)
         .short("c")
-        .long(CONFIG_OPTION)
+        .long(CONFIG_FILE_OPTION)
         .value_name("PATH")
         .help("Sets the path of the config file (default: config.yml)")
+        .takes_value(true),
+    )
+    .arg(
+      Arg::with_name(DATA_DIR_OPTION)
+        .short("d")
+        .long(DATA_DIR_OPTION)
+        .value_name("PATH")
+        .help("Sets the path of the directory in which to store persistent data (default: data)")
         .takes_value(true),
     )
     .arg(
@@ -105,7 +118,7 @@ fn settings() -> Settings {
 
   // Parse the config file path.
   let config_file_path = matches
-    .value_of(CONFIG_OPTION)
+    .value_of(CONFIG_FILE_OPTION)
     .unwrap_or(CONFIG_FILE_DEFAULT_PATH);
 
   // Parse the config file.
@@ -155,6 +168,16 @@ fn settings() -> Settings {
     },
   );
 
+  // Parse the data directory path.
+  let data_dir_path = Path::new(
+    matches
+      .value_of(DATA_DIR_OPTION)
+      .unwrap_or(DATA_DIR_DEFAULT_PATH),
+  );
+
+  // Determine the data file path [tag:data-file-path-has-parent].
+  let data_file_path = Path::join(data_dir_path, format!("{}:{}", ip, port));
+
   // Return the settings.
   Settings {
     nodes: config.nodes,
@@ -162,138 +185,170 @@ fn settings() -> Settings {
     ip,
     port,
     proposal: matches.value_of(PROPOSE_OPTION).map(|x| x.to_string()),
+    data_file_path,
   }
 }
 
 // Run the program.
-fn run(settings: Settings) {
+fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
   // Initialize the program state.
-  let state_for_acceptor = Arc::new(RwLock::new(initial()));
-  let state_for_proposer = state_for_acceptor.clone();
+  let state = Arc::new(RwLock::new(initial()));
 
-  // Set up the HTTP server.
-  let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
-  let server = Server::try_bind(&address)
-    .unwrap_or_else(|e| {
-      error!("Unable to bind to address `{}`. Reason: {}", address, e);
-      exit(1);
-    })
-    .serve(move || {
-      let state = state_for_acceptor.clone();
-      service_fn(
-        move |req: Request<Body>| -> Box<
-          dyn Future<
-              Item = Response<Body>,
-              Error = timeout::Error<hyper::Error>,
-            > + Send,
-        > {
-          let state = state.clone();
-
-          // This macro eliminates some boilerplate in the match expression
-          // below. If Rust had higher-ranked types or let polymorphism, this
-          // could have been implemented as a function.
-          macro_rules! rpc {
-            ($x:ident) => {
-              Box::new(req.into_body().concat2().timeout(BODY_TIMEOUT).map(
-                move |chunk| {
-                  let state = state.clone();
-                  let body = chunk.iter().cloned().collect::<Vec<u8>>();
-                  // The `unwrap` is safe under non-Byzantine conditions
-                  let payload = bincode::deserialize(&body).unwrap();
-                  let response = {
-                    // The `unwrap` is safe since it can only fail if a panic
-                    // already happened.
-                    let mut state_borrow = state.write().unwrap();
-                    acceptor::$x(&payload, &mut state_borrow)
-                  };
-                  Response::new(Body::from(
-                    bincode::serialize(&response).unwrap(),
-                  ))
-                },
-              ))
-            };
-          }
-
-          // Match on the route and handle the request appropriately.
-          match (req.method(), req.uri().path()) {
-            // RPC calls
-            (&Method::POST, acceptor::PREPARE_ENDPOINT) => rpc![prepare],
-            (&Method::POST, acceptor::ACCEPT_ENDPOINT) => rpc![accept],
-            (&Method::POST, acceptor::CHOOSE_ENDPOINT) => rpc![choose],
-
-            // Summary of the program state
-            (&Method::GET, "/") => {
-              // Respond with a representation of the program state.
-              let state_repr = {
-                // The `unwrap` is safe since it can only fail if a panic
-                // already happened.
-                let state_borrow: &State = &state.read().unwrap();
-                // The `unwrap` is safe because serialization should never
-                // fail.
-                serde_yaml::to_string(state_borrow).unwrap()
-              };
-              Box::new(future::ok(Response::new(Body::from(format!(
-                "System operational.\n\n{}",
-                state_repr
-              )))))
-            }
-
-            // Favicon
-            (&Method::GET, "/favicon.ico") => {
-              // Respond with the favicon.
-              Box::new(future::ok(
-                Response::builder()
-                  .header(hyper::header::CONTENT_TYPE, "image/x-icon")
-                  .body(Body::from(FAVICON_DATA))
-                  // The `unwrap` is safe since we constructed a well-formed
-                  // response.
-                  .unwrap(),
-              ))
-            }
-
-            // Catch-all
-            _ => {
-              // Respond with a generic 404 page.
-              Box::new(future::ok(
-                Response::builder()
-                  .status(StatusCode::NOT_FOUND)
-                  .body(Body::from("Not found."))
-                  // The `unwrap` is safe since we constructed a well-formed
-                  // response.
-                  .unwrap(),
-              ))
-            }
-          }
-        },
-      )
-    })
-    .map_err(|e| error!("Server error: {}", e));
-
-  // Set up the HTTP client.
-  let client = Client::new();
-
-  // Start the runtime.
-  tokio::run(future::lazy(move || {
-    // Start the server.
-    tokio::spawn(server);
-
-    // Propose a value if applicable.
-    if let Some(value) = settings.proposal {
-      tokio::spawn(propose(
-        &client,
-        &settings.nodes,
-        settings.node_index,
-        &value,
-        state_for_proposer,
-      ));
+  // Attempt to read the persisted state.
+  state::read(state.clone(), &settings.data_file_path).then(move |read_result| {
+    // Inform the user whether the read succeeded.
+    if read_result.is_ok() {
+      info!("State loaded from persistent storage.");
+    } else {
+      info!("Starting from the initial state.");
     }
 
-    // Tell the user that the server is running.
-    info!("Listening on http://{}.", address);
+    // Clone some data that will outlive this function.
+    let state_for_acceptor = state.clone();
+    let state_for_proposer = state_for_acceptor.clone();
+    let settings_for_acceptor = settings.clone();
 
-    // Return control back to the runtime.
-    Ok(())
-  }));
+    // Set up the HTTP server.
+    let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
+    let server = Server::try_bind(&address)
+      .unwrap_or_else(|e| {
+        error!("Unable to bind to address `{}`. Reason: {}", address, e);
+        exit(1);
+      })
+      .serve(move || {
+        let state = state_for_acceptor.clone();
+        let settings = settings_for_acceptor.clone();
+        service_fn(
+          move |req: Request<Body>| -> Box<
+            dyn Future<
+                Item = Response<Body>,
+                Error = Box<dyn error::Error + Send + Sync>,
+              > + Send,
+          > {
+            let state_for_request = state.clone();
+            let state_for_write = state.clone();
+            let settings = settings.clone();
+
+            // This macro eliminates some boilerplate in the match expression
+            // below. If Rust had higher-ranked types or let polymorphism, this
+            // could have been implemented as a function.
+            macro_rules! rpc {
+              ($x:ident) => {
+                Box::new(
+                  req.into_body().concat2().timeout(BODY_TIMEOUT).map(
+                    move |chunk| {
+                      let state = state_for_request.clone();
+
+                      let body = chunk.iter().cloned().collect::<Vec<u8>>();
+                      // The `unwrap` is safe under non-Byzantine conditions
+                      let payload = bincode::deserialize(&body).unwrap();
+
+                      // The `unwrap` is safe since it can only fail if a panic
+                      // already happened.
+                      let mut state_borrow = state.write().unwrap();
+                      acceptor::$x(&payload, &mut state_borrow)
+                    }
+                  ).map_err(|e|
+                    Box::new(e) as Box<dyn error::Error + Send + Sync>
+                  ).and_then(move |response| {
+                    let state = state_for_write.clone();
+                    let settings = settings.clone();
+
+                    // The `unwrap` is safe since it can only fail if a panic
+                    // already happened.
+                    let state_borrow = state.read().unwrap();
+
+                    state::write(&state_borrow, &settings.data_file_path).map(|_| response).map_err(|e|
+                      Box::new(e) as Box<dyn error::Error + Send + Sync>
+                    )
+                  }).map(|response|
+                    Response::new(Body::from(
+                      // The `unwrap` is safe because serialization should never
+                      // fail.
+                      bincode::serialize(&response).unwrap(),
+                    ))
+                  )
+                )
+              };
+            }
+
+            // Match on the route and handle the request appropriately.
+            match (req.method(), req.uri().path()) {
+              // RPC calls
+              (&Method::POST, acceptor::PREPARE_ENDPOINT) => rpc![prepare],
+              (&Method::POST, acceptor::ACCEPT_ENDPOINT) => rpc![accept],
+              (&Method::POST, acceptor::CHOOSE_ENDPOINT) => rpc![choose],
+
+              // Summary of the program state
+              (&Method::GET, "/") => {
+                // Respond with a representation of the program state.
+                let state_repr = {
+                  // The `unwrap` is safe since it can only fail if a panic
+                  // already happened.
+                  let state_borrow: &State = &state.read().unwrap();
+                  // The `unwrap` is safe because serialization should never
+                  // fail.
+                  serde_yaml::to_string(state_borrow).unwrap()
+                };
+                Box::new(ok(Response::new(Body::from(format!(
+                  "System operational.\n\n{}",
+                  state_repr
+                )))))
+              }
+
+              // Favicon
+              (&Method::GET, "/favicon.ico") => {
+                // Respond with the favicon.
+                Box::new(ok(
+                  Response::builder()
+                    .header(hyper::header::CONTENT_TYPE, "image/x-icon")
+                    .body(Body::from(FAVICON_DATA))
+                    // The `unwrap` is safe since we constructed a well-formed
+                    // response.
+                    .unwrap(),
+                ))
+              }
+
+              // Catch-all
+              _ => {
+                // Respond with a generic 404 page.
+                Box::new(ok(
+                  Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::from("Not found."))
+                    // The `unwrap` is safe since we constructed a well-formed
+                    // response.
+                    .unwrap(),
+                ))
+              }
+            }
+          },
+        )
+      })
+      .map_err(|e| error!("Server error: {}", e));
+
+    // Propose a value if applicable.
+    let client = if let Some(value) = settings.proposal {
+      Box::new(
+        propose(
+          &Client::new(),
+          &settings.nodes,
+          settings.node_index,
+          state_for_proposer,
+          &settings.data_file_path,
+          &value,
+        )
+      ) as Box<Future<Item = (), Error = ()> + Send>
+    } else {
+      Box::new(ok(())) as Box<Future<Item = (), Error = ()> + Send>
+    };
+
+    // Tell the user the address of the server.
+    info!("Listening on http://{}", address);
+
+    // Run the server and the client.
+    server.join(client).map(|_| ())
+  })
 }
 
 // Let the fun begin!
@@ -307,6 +362,6 @@ fn main() {
   })
   .init();
 
-  // Run Paxos!
-  run(settings());
+  // Run the program!
+  tokio::run(run(settings()));
 }

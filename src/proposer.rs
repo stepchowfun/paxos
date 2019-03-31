@@ -10,6 +10,7 @@ use hyper::{client::HttpConnector, Client};
 use rand::{thread_rng, Rng};
 use std::{
   net::SocketAddrV4,
+  path::Path,
   sync::{Arc, RwLock},
   time::{Duration, Instant},
 };
@@ -38,15 +39,15 @@ pub fn propose(
   client: &Client<HttpConnector>,
   nodes: &[SocketAddrV4],
   node_index: usize,
-  value: &str,
   state: Arc<RwLock<State>>,
-) -> Box<dyn Future<Item = (), Error = ()> + Send> {
+  data_file_path: &Path,
+  value: &str,
+) -> impl Future<Item = (), Error = ()> + Send {
   // Clone some data that will outlive this function.
-  let value = value.to_string();
-  let original_value_for_choose = value.clone();
-  let nodes = nodes.to_vec();
   let client = client.clone();
-  let nodes = nodes.clone();
+  let nodes = nodes.to_owned();
+  let data_file_path = data_file_path.to_owned();
+  let value = value.to_owned();
 
   // Generate a new proposal number.
   let proposal_number = {
@@ -55,22 +56,37 @@ pub fn propose(
     generate_proposal_number(&nodes, node_index, &mut state_borrow)
   };
 
-  // Send a prepare message to all the nodes.
-  info!(
-    "Preparing value `{}` with proposal number:\n{}",
-    value,
-    serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
-  );
-  let prepares = broadcast(
-    &nodes,
-    &client,
-    PREPARE_ENDPOINT,
-    PrepareRequest { proposal_number },
-  );
+  // Persist the state.
+  {
+    // The `unwrap` is safe since it can only fail if a panic
+    // already happened.
+    let state_borrow = state.read().unwrap();
 
-  // Wait for a majority of the nodes to respond.
-  let majority = nodes.len() / 2 + 1;
-  Box::new(
+    crate::state::write(&state_borrow, &data_file_path)
+  }
+  .map_err(|e| {
+    error!("{}", e);
+  })
+  .and_then(move |_| {
+    // Clone some data that will outlive this function.
+    let value_for_prepare = value.clone();
+
+    // Send a prepare message to all the nodes.
+    info!(
+      "Preparing value `{}` with proposal number:\n{}",
+      value,
+      serde_yaml::to_string(&proposal_number).unwrap() // Serialization is safe.
+    );
+    let prepares: Box<dyn Stream<Item = PrepareResponse, Error = ()> + Send> =
+      broadcast(
+        &nodes,
+        &client,
+        PREPARE_ENDPOINT,
+        PrepareRequest { proposal_number },
+      );
+
+    // Wait for a majority of the nodes to respond.
+    let majority = nodes.len() / 2 + 1;
     when(prepares, move |responses: &[PrepareResponse]| {
       // Check if we have a quorum.
       if responses.len() < majority {
@@ -89,30 +105,29 @@ pub fn propose(
         } else {
           // Propose the given value.
           info!("Quorum replied with no existing value.");
-          Some(value.clone())
+          Some(value_for_prepare.clone())
         }
       }
     })
-    .and_then(move |value| {
-      // Clone some data that will outlive this function.
-      let value_for_choose = value.clone();
-
+    .and_then(move |value_for_accept| {
       // Send an accept message to all the nodes.
       info!(
         "Requesting acceptance of value `{}` with proposal number:\n{}",
-        value,
+        value_for_accept,
         // The `unwrap` is safe because serialization should never fail.
         serde_yaml::to_string(&proposal_number).unwrap()
       );
-      let accepts = broadcast(
-        &nodes,
-        &client,
-        ACCEPT_ENDPOINT,
-        AcceptRequest {
-          proposal: (proposal_number, value),
-        },
-      );
+      let accepts: Box<dyn Stream<Item = AcceptResponse, Error = ()> + Send> =
+        broadcast(
+          &nodes,
+          &client,
+          ACCEPT_ENDPOINT,
+          AcceptRequest {
+            proposal: (proposal_number, value_for_accept.clone()),
+          },
+        );
 
+      // Wait for a majority of the nodes to respond.
       when(accepts, move |responses: &[AcceptResponse]| {
         // Check if we have a quorum.
         if responses.len() < majority {
@@ -140,7 +155,7 @@ pub fn propose(
               &client,
               CHOOSE_ENDPOINT,
               ChooseRequest {
-                value: value_for_choose,
+                value: value_for_accept,
               },
             )
             .fold((), |_, _: ChooseResponse| ok(()))
@@ -160,15 +175,16 @@ pub fn propose(
                 &client,
                 &nodes,
                 node_index,
-                &original_value_for_choose,
                 state,
+                &data_file_path,
+                &value,
               )
             }),
           ) as Box<Future<Item = (), Error = ()> + Send>
         }
       })
-    }),
-  )
+    })
+  })
 }
 
 #[cfg(test)]

@@ -1,5 +1,15 @@
+use futures::{
+  future::{err, ok},
+  prelude::*,
+};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use std::{
+  cmp::Ordering,
+  io,
+  path::Path,
+  sync::{Arc, RwLock},
+};
+use tokio::fs;
 
 // A representation of a proposal number
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -34,7 +44,7 @@ impl PartialOrd for ProposalNumber {
 }
 
 // The state of the whole program is described by this struct.
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct State {
   pub next_round: u64,
   pub min_proposal_number: Option<ProposalNumber>,
@@ -50,6 +60,52 @@ pub fn initial() -> State {
     accepted_proposal: None,
     chosen_value: None,
   }
+}
+
+// Write the state to a file.
+pub fn write(
+  state: &State,
+  path: &Path,
+) -> impl Future<Item = (), Error = io::Error> {
+  // Clone some data that will outlive this function.
+  let path = path.to_owned();
+
+  // The `unwrap` is safe because serialization should never fail.
+  let payload = bincode::serialize(&state).unwrap();
+
+  // The `unwrap` is safe due to [ref:data-file-path-has-parent].
+  let parent = path.parent().unwrap().to_owned();
+
+  // Create the directories if necessary and write the file.
+  fs::create_dir_all(parent)
+    .and_then(|_| fs::write(path, payload))
+    .map(|_| ())
+}
+
+// Read the state from a file.
+pub fn read(
+  state: Arc<RwLock<State>>,
+  path: &Path,
+) -> impl Future<Item = (), Error = io::Error> {
+  // Clone some data that will outlive this function.
+  let path = path.to_owned();
+
+  // Do the read.
+  fs::read(path).and_then(move |data| {
+    let mut state_borrow = state.write().unwrap();
+    bincode::deserialize(&data).ok().map_or_else(
+      || {
+        err(io::Error::new(
+          io::ErrorKind::InvalidData,
+          "Unable to deserialize the persisted state.",
+        ))
+      },
+      |result| {
+        *state_borrow = result;
+        ok(())
+      },
+    )
+  })
 }
 
 #[cfg(test)]
