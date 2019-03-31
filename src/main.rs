@@ -84,7 +84,10 @@ fn settings() -> Settings {
         .short("c")
         .long(CONFIG_FILE_OPTION)
         .value_name("PATH")
-        .help("Sets the path of the config file (default: config.yml)")
+        .help(&format!(
+          "Sets the path of the config file (default: {})",
+          CONFIG_FILE_DEFAULT_PATH,
+        ))
         .takes_value(true),
     )
     .arg(
@@ -92,7 +95,11 @@ fn settings() -> Settings {
         .short("d")
         .long(DATA_DIR_OPTION)
         .value_name("PATH")
-        .help("Sets the path of the directory in which to store persistent data (default: data)")
+        .help(&format!(
+          "Sets the path of the directory in which to store persistent data \
+           (default: {})",
+          DATA_DIR_DEFAULT_PATH,
+        ))
         .takes_value(true),
     )
     .arg(
@@ -195,44 +202,46 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
   let state = Arc::new(RwLock::new(initial()));
 
   // Attempt to read the persisted state.
-  state::read(state.clone(), &settings.data_file_path).then(move |read_result| {
-    // Inform the user whether the read succeeded.
-    if read_result.is_ok() {
-      info!("State loaded from persistent storage.");
-    } else {
-      info!("Starting from the initial state.");
-    }
+  state::read(state.clone(), &settings.data_file_path).then(
+    move |read_result| {
+      // Inform the user whether the read succeeded.
+      if read_result.is_ok() {
+        info!("State loaded from persistent storage.");
+      } else {
+        info!("Starting from the initial state.");
+      }
 
-    // Clone some data that will outlive this function.
-    let state_for_acceptor = state.clone();
-    let state_for_proposer = state_for_acceptor.clone();
-    let settings_for_acceptor = settings.clone();
+      // Clone some data that will outlive this function.
+      let state_for_acceptor = state.clone();
+      let state_for_proposer = state_for_acceptor.clone();
+      let settings_for_acceptor = settings.clone();
 
-    // Set up the HTTP server.
-    let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
-    let server = Server::try_bind(&address)
-      .unwrap_or_else(|e| {
-        error!("Unable to bind to address `{}`. Reason: {}", address, e);
-        exit(1);
-      })
-      .serve(move || {
-        let state = state_for_acceptor.clone();
-        let settings = settings_for_acceptor.clone();
-        service_fn(
-          move |req: Request<Body>| -> Box<
-            dyn Future<
-                Item = Response<Body>,
-                Error = Box<dyn error::Error + Send + Sync>,
-              > + Send,
-          > {
-            let state_for_request = state.clone();
-            let state_for_write = state.clone();
-            let settings = settings.clone();
+      // Set up the HTTP server.
+      let address =
+        SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
+      let server = Server::try_bind(&address)
+        .unwrap_or_else(|e| {
+          error!("Unable to bind to address `{}`. Reason: {}", address, e);
+          exit(1);
+        })
+        .serve(move || {
+          let state = state_for_acceptor.clone();
+          let settings = settings_for_acceptor.clone();
+          service_fn(
+            move |req: Request<Body>| -> Box<
+              dyn Future<
+                  Item = Response<Body>,
+                  Error = Box<dyn error::Error + Send + Sync>,
+                > + Send,
+            > {
+              let state_for_request = state.clone();
+              let state_for_write = state.clone();
+              let settings = settings.clone();
 
-            // This macro eliminates some boilerplate in the match expression
-            // below. If Rust had higher-ranked types or let polymorphism, this
-            // could have been implemented as a function.
-            macro_rules! rpc {
+              // This macro eliminates some boilerplate in the match expression
+              // below. If Rust had higher-ranked types or let polymorphism,
+              // this could have been implemented as a function.
+              macro_rules! rpc {
               ($x:ident) => {
                 Box::new(
                   req.into_body().concat2().timeout(BODY_TIMEOUT).map(
@@ -258,13 +267,15 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                     // already happened.
                     let state_borrow = state.read().unwrap();
 
-                    state::write(&state_borrow, &settings.data_file_path).map(|_| response).map_err(|e|
-                      Box::new(e) as Box<dyn error::Error + Send + Sync>
-                    )
+                    state::write(&state_borrow, &settings.data_file_path)
+                      .map(|_| response)
+                      .map_err(|e|
+                        Box::new(e) as Box<dyn error::Error + Send + Sync>
+                      )
                   }).map(|response|
                     Response::new(Body::from(
-                      // The `unwrap` is safe because serialization should never
-                      // fail.
+                      // The `unwrap` is safe because serialization should
+                      // never fail.
                       bincode::serialize(&response).unwrap(),
                     ))
                   )
@@ -272,83 +283,82 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
               };
             }
 
-            // Match on the route and handle the request appropriately.
-            match (req.method(), req.uri().path()) {
-              // RPC calls
-              (&Method::POST, acceptor::PREPARE_ENDPOINT) => rpc![prepare],
-              (&Method::POST, acceptor::ACCEPT_ENDPOINT) => rpc![accept],
-              (&Method::POST, acceptor::CHOOSE_ENDPOINT) => rpc![choose],
+              // Match on the route and handle the request appropriately.
+              match (req.method(), req.uri().path()) {
+                // RPC calls
+                (&Method::POST, acceptor::PREPARE_ENDPOINT) => rpc![prepare],
+                (&Method::POST, acceptor::ACCEPT_ENDPOINT) => rpc![accept],
+                (&Method::POST, acceptor::CHOOSE_ENDPOINT) => rpc![choose],
 
-              // Summary of the program state
-              (&Method::GET, "/") => {
-                // Respond with a representation of the program state.
-                let state_repr = {
-                  // The `unwrap` is safe since it can only fail if a panic
-                  // already happened.
-                  let state_borrow: &State = &state.read().unwrap();
-                  // The `unwrap` is safe because serialization should never
-                  // fail.
-                  serde_yaml::to_string(state_borrow).unwrap()
-                };
-                Box::new(ok(Response::new(Body::from(format!(
-                  "System operational.\n\n{}",
-                  state_repr
-                )))))
+                // Summary of the program state
+                (&Method::GET, "/") => {
+                  // Respond with a representation of the program state.
+                  let state_repr = {
+                    // The `unwrap` is safe since it can only fail if a panic
+                    // already happened.
+                    let state_borrow: &State = &state.read().unwrap();
+                    // The `unwrap` is safe because serialization should never
+                    // fail.
+                    serde_yaml::to_string(state_borrow).unwrap()
+                  };
+                  Box::new(ok(Response::new(Body::from(format!(
+                    "System operational.\n\n{}",
+                    state_repr
+                  )))))
+                }
+
+                // Favicon
+                (&Method::GET, "/favicon.ico") => {
+                  // Respond with the favicon.
+                  Box::new(ok(
+                    Response::builder()
+                      .header(hyper::header::CONTENT_TYPE, "image/x-icon")
+                      .body(Body::from(FAVICON_DATA))
+                      // The `unwrap` is safe since we constructed a
+                      // well-formed response.
+                      .unwrap(),
+                  ))
+                }
+
+                // Catch-all
+                _ => {
+                  // Respond with a generic 404 page.
+                  Box::new(ok(
+                    Response::builder()
+                      .status(StatusCode::NOT_FOUND)
+                      .body(Body::from("Not found."))
+                      // The `unwrap` is safe since we constructed a
+                      // well-formed response.
+                      .unwrap(),
+                  ))
+                }
               }
+            },
+          )
+        })
+        .map_err(|e| error!("Server error: {}", e));
 
-              // Favicon
-              (&Method::GET, "/favicon.ico") => {
-                // Respond with the favicon.
-                Box::new(ok(
-                  Response::builder()
-                    .header(hyper::header::CONTENT_TYPE, "image/x-icon")
-                    .body(Body::from(FAVICON_DATA))
-                    // The `unwrap` is safe since we constructed a well-formed
-                    // response.
-                    .unwrap(),
-                ))
-              }
-
-              // Catch-all
-              _ => {
-                // Respond with a generic 404 page.
-                Box::new(ok(
-                  Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::from("Not found."))
-                    // The `unwrap` is safe since we constructed a well-formed
-                    // response.
-                    .unwrap(),
-                ))
-              }
-            }
-          },
-        )
-      })
-      .map_err(|e| error!("Server error: {}", e));
-
-    // Propose a value if applicable.
-    let client = if let Some(value) = settings.proposal {
-      Box::new(
-        propose(
+      // Propose a value if applicable.
+      let client = if let Some(value) = settings.proposal {
+        Box::new(propose(
           &Client::new(),
           &settings.nodes,
           settings.node_index,
           state_for_proposer,
           &settings.data_file_path,
           &value,
-        )
-      ) as Box<Future<Item = (), Error = ()> + Send>
-    } else {
-      Box::new(ok(())) as Box<Future<Item = (), Error = ()> + Send>
-    };
+        )) as Box<Future<Item = (), Error = ()> + Send>
+      } else {
+        Box::new(ok(())) as Box<Future<Item = (), Error = ()> + Send>
+      };
 
-    // Tell the user the address of the server.
-    info!("Listening on http://{}", address);
+      // Tell the user the address of the server.
+      info!("Listening on http://{}", address);
 
-    // Run the server and the client.
-    server.join(client).map(|_| ())
-  })
+      // Run the server and the client.
+      server.join(client).map(|_| ())
+    },
+  )
 }
 
 // Let the fun begin!
