@@ -20,18 +20,20 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
 // on retries.
 pub fn repeat<
   I: 'static + Send,
-  C: 'static + Send + Fn() -> Box<dyn Future<Item = I, Error = ()> + Send>,
+  R: 'static + Send + Future<Item = I, Error = ()>,
+  C: 'static + Send + Fn() -> R,
 >(
   constructor: C,
-) -> Box<dyn Future<Item = I, Error = ()> + Send> {
+) -> impl Send + Future<Item = I, Error = ()> {
   fn repeat_rec<
     I: 'static + Send,
-    C: 'static + Send + Fn() -> Box<dyn Future<Item = I, Error = ()> + Send>,
+    R: 'static + Send + Future<Item = I, Error = ()>,
+    C: 'static + Send + Fn() -> R,
   >(
     constructor: C,
     delay: Duration,
-  ) -> Box<dyn Future<Item = I, Error = ()> + Send> {
-    Box::new(constructor().then(move |result| {
+  ) -> impl Future<Item = I, Error = ()> + Send {
+    constructor().then(move |result| {
       if let Ok(x) = result {
         Box::new(ok(x)) as Box<dyn Future<Item = I, Error = ()> + Send>
       } else {
@@ -41,7 +43,7 @@ pub fn repeat<
           },
         )) as Box<dyn Future<Item = I, Error = ()> + Send>
       }
-    }))
+    })
   }
 
   repeat_rec(constructor, EXPONENTIAL_BACKOFF_MIN)
@@ -57,7 +59,7 @@ pub fn broadcast<
   client: &Client<HttpConnector>,
   endpoint: &str,
   payload: P,
-) -> Box<dyn Stream<Item = R, Error = ()> + Send> {
+) -> impl Send + Stream<Item = R, Error = ()> {
   nodes
     .iter()
     .map(|node| {
@@ -66,34 +68,36 @@ pub fn broadcast<
       let endpoint = endpoint.to_string();
       let payload = payload.clone();
       repeat(move || {
-        Box::new(
-          client
-            .request(
-              Request::builder()
-                .method(Method::POST)
-                .uri(format!("http://{}{}", node, endpoint))
-                .body(Body::from(
-                  // The `unwrap` is safe because serialization should never
-                  // fail.
-                  bincode::serialize(&payload).unwrap(),
-                ))
-                .unwrap(), // Safe since we constructed a well-formed request
-            )
-            .and_then(|response| {
-              response.into_body().concat2().map(|body| {
-                bincode::deserialize(
-                  &body.iter().cloned().collect::<Vec<u8>>(),
-                )
+        client
+          .request(
+            Request::builder()
+              .method(Method::POST)
+              .uri(format!("http://{}{}", node, endpoint))
+              .body(Body::from(
+                // The `unwrap` is safe because serialization should never
+                // fail.
+                bincode::serialize(&payload).unwrap(),
+              ))
+              .unwrap(), // Safe since we constructed a well-formed request
+          )
+          .and_then(|response| {
+            response.into_body().concat2().map(|body| {
+              bincode::deserialize(&body.iter().cloned().collect::<Vec<u8>>())
                 .unwrap() // Safe under non-Byzantine conditions
-              })
             })
-            .timeout(REQUEST_TIMEOUT)
-            .map_err(|_| ()),
-        )
+          })
+          .timeout(REQUEST_TIMEOUT)
+          .map_err(|_| ())
       })
       .into_stream()
     })
-    .fold(Box::new(stream::empty()), |acc, x| Box::new(acc.select(x)))
+    .fold(
+      Box::new(stream::empty())
+        as Box<dyn Stream<Item = R, Error = ()> + Send>,
+      |acc, x| {
+        Box::new(acc.select(x)) as Box<dyn Stream<Item = R, Error = ()> + Send>
+      },
+    )
 }
 
 // Wait for a sufficient set of futures to finish, where the criteria for
@@ -103,32 +107,34 @@ pub fn when<
   R: 'static + Send,
   K: 'static + Send + Fn(&[I]) -> Option<R>,
 >(
-  stream: Box<dyn Stream<Item = I, Error = ()> + Send>,
+  stream: impl 'static + Send + Stream<Item = I, Error = ()>,
   k: K,
-) -> Box<dyn Future<Item = R, Error = ()> + Send> {
+) -> impl Future<Item = R, Error = ()> + Send {
   fn when_rec<
     I: 'static + Send,
     R: 'static + Send,
     K: 'static + Send + Fn(&[I]) -> Option<R>,
   >(
-    stream: Box<dyn Stream<Item = I, Error = ()> + Send>,
+    stream: impl 'static + Send + Stream<Item = I, Error = ()>,
     mut acc: Vec<I>,
     k: K,
-  ) -> Box<dyn Future<Item = R, Error = ()> + Send> {
+  ) -> impl Send + Future<Item = R, Error = ()> {
     if let Some(result) = k(&acc) {
-      Box::new(ok(result))
+      Box::new(ok(result)) as Box<dyn Future<Item = R, Error = ()> + Send>
     } else {
       Box::new(stream.into_future().then(|result| match result {
         Ok((x, s)) => {
           if let Some(r) = x {
             acc.push(r);
-            when_rec(s, acc, k)
+            Box::new(when_rec(s, acc, k))
+              as Box<dyn Future<Item = R, Error = ()> + Send>
           } else {
-            Box::new(err(()))
+            Box::new(err(())) as Box<dyn Future<Item = R, Error = ()> + Send>
           }
         }
-        Err((_, s)) => when_rec(s, acc, k),
-      }))
+        Err((_, s)) => Box::new(when_rec(s, acc, k))
+          as Box<dyn Future<Item = R, Error = ()> + Send>,
+      })) as Box<dyn Future<Item = R, Error = ()> + Send>
     }
   }
 
@@ -136,7 +142,7 @@ pub fn when<
 }
 
 // The following provides fsync functionality in the form of a future.
-pub struct FSyncFuture {
+struct FSyncFuture {
   pub file: File,
 }
 
@@ -149,6 +155,6 @@ impl Future for FSyncFuture {
   }
 }
 
-pub fn fsync(file: File) -> FSyncFuture {
-  FSyncFuture { file: file }
+pub fn fsync(file: File) -> impl Future<Item = (), Error = Error> {
+  FSyncFuture { file }
 }

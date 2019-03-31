@@ -78,13 +78,12 @@ pub fn propose(
       // Serialization is safe.
       serde_yaml::to_string(&proposal_number).unwrap()
     );
-    let prepares: Box<dyn Stream<Item = PrepareResponse, Error = ()> + Send> =
-      broadcast(
-        &nodes,
-        &client,
-        PREPARE_ENDPOINT,
-        PrepareRequest { proposal_number },
-      );
+    let prepares = broadcast(
+      &nodes,
+      &client,
+      PREPARE_ENDPOINT,
+      PrepareRequest { proposal_number },
+    );
 
     // Wait for a majority of the nodes to respond.
     let majority = nodes.len() / 2 + 1;
@@ -118,15 +117,14 @@ pub fn propose(
         // The `unwrap` is safe because serialization should never fail.
         serde_yaml::to_string(&proposal_number).unwrap()
       );
-      let accepts: Box<dyn Stream<Item = AcceptResponse, Error = ()> + Send> =
-        broadcast(
-          &nodes,
-          &client,
-          ACCEPT_ENDPOINT,
-          AcceptRequest {
-            proposal: (proposal_number, value_for_accept.clone()),
-          },
-        );
+      let accepts = broadcast(
+        &nodes,
+        &client,
+        ACCEPT_ENDPOINT,
+        AcceptRequest {
+          proposal: (proposal_number, value_for_accept.clone()),
+        },
+      );
 
       // Wait for a majority of the nodes to respond.
       when(accepts, move |responses: &[AcceptResponse]| {
