@@ -1,0 +1,76 @@
+image: ubuntu:18.04
+tasks:
+  packages:
+    command: |
+      apt-get update
+      apt-get install --yes build-essential curl
+
+  tagref:
+    dependencies:
+      - packages
+    command: |
+      set -o pipefail
+      curl https://raw.githubusercontent.com/stepchowfun/tagref/master/install.sh -LSfs | VERSION=1.1.0 sh
+
+  user:
+    command: adduser --disabled-password --gecos '' user
+
+  rust:
+    dependencies:
+      - packages
+      - user
+    user: user
+    command: |
+      set -o pipefail
+      curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable-2019-04-25-x86_64-unknown-linux-gnu
+      . $HOME/.cargo/env
+      rustup component add clippy
+      rustup component add rustfmt
+      rm -rf "$(dirname "$(rustup which rustc)")/../share"
+
+  tools:
+    dependencies:
+      - rust
+      - tagref
+
+  build:
+    dependencies:
+      - tools
+    paths:
+      - Cargo.lock
+      - Cargo.toml
+      - resources
+      - src
+    user: user
+    command: |
+      . $HOME/.cargo/env
+      cargo build
+
+  test:
+    dependencies:
+      - build
+    user: user
+    command: |
+      . $HOME/.cargo/env
+      cargo test
+
+  lint:
+    dependencies:
+      - build
+    paths:
+      - .ignore # Used by `tagref`
+      - rustfmt.toml # Used by `cargo fmt`
+    user: user
+    command: |
+      . $HOME/.cargo/env
+      cargo fmt --all -- --check
+      cargo clippy -- --deny clippy::pedantic
+      tagref
+
+  run:
+    dependencies:
+      - lint
+    user: user
+    command: |
+      . $HOME/.cargo/env
+      cargo run -- --help
