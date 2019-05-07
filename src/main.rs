@@ -8,23 +8,28 @@ mod util;
 extern crate log;
 
 use clap::{App, Arg};
-use env_logger::{Builder, Env};
+use env_logger::{fmt::Color, Builder};
 use futures::{future::ok, prelude::*};
 use hyper::{
   header::CONTENT_TYPE, service::service_fn, Body, Client, Method, Request,
   Response, Server, StatusCode,
 };
+use log::{Level, LevelFilter};
 use proposer::propose;
 use state::{initial, State};
 use std::{
+  env,
   error::Error,
   fs,
   net::{Ipv4Addr, SocketAddr, SocketAddrV4},
   path::{Path, PathBuf},
   process::exit,
+  str::FromStr,
+  string::ToString,
   sync::{Arc, RwLock},
   time::Duration,
 };
+use textwrap::Wrapper;
 use tokio::prelude::*;
 
 // We embed the favicon directly into the compiled binary.
@@ -36,6 +41,7 @@ const BODY_TIMEOUT: Duration = Duration::from_secs(1);
 // Defaults
 const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
 const DATA_DIR_DEFAULT_PATH: &str = "data";
+const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Info;
 
 // Command-line option names
 const CONFIG_FILE_OPTION: &str = "config-file";
@@ -192,7 +198,7 @@ fn settings() -> Settings {
     node_index,
     ip,
     port,
-    proposal: matches.value_of(PROPOSE_OPTION).map(|x| x.to_string()),
+    proposal: matches.value_of(PROPOSE_OPTION).map(ToString::to_string),
     data_file_path,
   }
 }
@@ -366,13 +372,45 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
 // Let the fun begin!
 fn main() {
   // Set up the logger.
-  Builder::from_env(
-    Env::default().filter("LOG_LEVEL").write_style("LOG_STYLE"),
-  )
-  .format(|buf, record| {
-    writeln!(buf, "[{}] {}", record.level(), record.args())
-  })
-  .init();
+  Builder::new()
+    .filter_module(
+      module_path!(),
+      LevelFilter::from_str(
+        &env::var("LOG_LEVEL")
+          .unwrap_or_else(|_| DEFAULT_LOG_LEVEL.to_string()),
+      )
+      .unwrap_or_else(|_| DEFAULT_LOG_LEVEL),
+    )
+    .format(|buf, record| {
+      let mut style = buf.style();
+      style.set_bold(true);
+      match record.level() {
+        Level::Error => {
+          style.set_color(Color::Red);
+        }
+        Level::Warn => {
+          style.set_color(Color::Yellow);
+        }
+        Level::Info => {
+          style.set_color(Color::Green);
+        }
+        Level::Debug | Level::Trace => {
+          style.set_color(Color::Blue);
+        }
+      }
+      let indent_size = record.level().to_string().len() + 3;
+      let indent = &" ".repeat(indent_size);
+      writeln!(
+        buf,
+        "{} {}",
+        style.value(format!("[{}]", record.level())),
+        &Wrapper::with_termwidth()
+          .initial_indent(indent)
+          .subsequent_indent(indent)
+          .fill(&record.args().to_string())[indent_size..]
+      )
+    })
+    .init();
 
   // Run the program!
   tokio::run(run(settings()));
