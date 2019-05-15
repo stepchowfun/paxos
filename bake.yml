@@ -1,5 +1,4 @@
 image: ubuntu:18.04
-default: ci
 tasks:
   install_packages:
     command: |-
@@ -102,25 +101,3 @@ tasks:
       set -euxo pipefail
       . $HOME/.cargo/env
       cargo run -- --help
-
-  ci:
-    dependencies:
-      - build
-      - lint
-      - test
-      - run
-
-  release:
-    dependencies:
-      - fetch_crates
-    input_paths:
-      - src
-    output_paths:
-      - artifacts
-    user: user
-    command: |-
-      set -euo pipefail
-      . $HOME/.cargo/env
-      cargo build --release
-      mkdir artifacts
-      cp target/release/paxos artifacts/paxos-x86_64-unknown-linux-gnu
