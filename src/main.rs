@@ -32,6 +32,9 @@ use std::{
 use textwrap::Wrapper;
 use tokio::prelude::*;
 
+// The program version
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 // We embed the favicon directly into the compiled binary.
 const FAVICON_DATA: &[u8] = include_bytes!("../resources/favicon.ico");
 
@@ -66,7 +69,7 @@ struct Settings {
 fn settings() -> Settings {
   // Set up the command-line interface.
   let matches = App::new("Paxos")
-    .version("1.0.0")
+    .version(VERSION)
     .author("Stephan Boyer <stephan@stephanboyer.com>")
     .about("This is an implementation of single-decree paxos.")
     .arg(
