@@ -1,4 +1,5 @@
 image: ubuntu:18.04
+default: ci
 tasks:
   install_packages:
     command: |
@@ -11,7 +12,8 @@ tasks:
       - install_packages
     command: |
       set -euo pipefail
-      curl https://raw.githubusercontent.com/stepchowfun/tagref/master/install.sh -LSfs | VERSION=1.2.0 sh
+      curl https://raw.githubusercontent.com/stepchowfun/tagref/master/install.sh -LSfs |
+        VERSION=1.2.0 sh
 
   create_user:
     command: |
@@ -25,7 +27,8 @@ tasks:
     user: user
     command: |
       set -euo pipefail
-      curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable-2019-04-25-x86_64-unknown-linux-gnu
+      curl https://sh.rustup.rs -sSf |
+        sh -s -- -y --default-toolchain stable-2019-04-25-x86_64-unknown-linux-gnu
       . $HOME/.cargo/env
       rustup component add clippy
       rustup component add rustfmt
@@ -84,12 +87,12 @@ tasks:
       - build
     input_paths:
       - .ignore # Used by `tagref`
-      - rustfmt.toml # Used by `cargo fmt`
     user: user
     command: |
       set -euo pipefail
       . $HOME/.cargo/env
-      cargo clippy --all-targets --all-features -- --deny warnings --deny clippy::all --deny clippy::pedantic
+      cargo clippy --all-targets --all-features -- \
+        --deny warnings --deny clippy::all --deny clippy::pedantic
       cargo fmt --all -- --check
       tagref
 
@@ -101,3 +104,34 @@ tasks:
       set -euo pipefail
       . $HOME/.cargo/env
       cargo run -- --help
+
+  ci:
+    dependencies:
+      - build
+      - lint
+      - run
+      - test
+
+  check:
+    dependencies:
+      - fetch_crates
+    input_paths:
+      - src
+    user: user
+    command: |
+      set -euo pipefail
+      . $HOME/.cargo/env
+      cargo check
+
+  format:
+    dependencies:
+      - fetch_crates
+    input_paths:
+      - src
+    output_paths:
+      - src
+    user: user
+    command: |
+      set -euo pipefail
+      . $HOME/.cargo/env
+      cargo fmt --all
