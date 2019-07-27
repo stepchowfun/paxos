@@ -9,7 +9,7 @@ extern crate log;
 
 use clap::{App, Arg};
 use env_logger::{fmt::Color, Builder};
-use futures::{future::ok, prelude::*};
+use futures::{future::ok, stream::Stream};
 use hyper::{
     header::CONTENT_TYPE, service::service_fn, Body, Client, Method, Request, Response, Server,
     StatusCode,
@@ -21,6 +21,7 @@ use std::{
     env,
     error::Error,
     fs,
+    io::Write,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::{Path, PathBuf},
     process::exit,
@@ -30,7 +31,7 @@ use std::{
     time::Duration,
 };
 use textwrap::Wrapper;
-use tokio::prelude::*;
+use tokio::prelude::{Future, FutureExt};
 
 // The program version
 const VERSION: &str = env!("CARGO_PKG_VERSION");
