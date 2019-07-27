@@ -4,7 +4,7 @@ use crate::acceptor::{
 };
 use crate::state::{ProposalNumber, State};
 use crate::util::{broadcast, when};
-use futures::{future::ok, prelude::*};
+use futures::{future::ok, prelude::Future, stream::Stream};
 use hyper::{client::HttpConnector, Client};
 use rand::{thread_rng, Rng};
 use std::{

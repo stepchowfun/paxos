@@ -1,7 +1,7 @@
 use crate::util::fsync;
 use futures::{
     future::{err, ok},
-    prelude::*,
+    prelude::Future,
 };
 use serde::{Deserialize, Serialize};
 use std::{
