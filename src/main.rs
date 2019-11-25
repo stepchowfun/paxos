@@ -67,6 +67,7 @@ struct Settings {
 }
 
 // Parse the command-line options.
+#[allow(clippy::too_many_lines)]
 fn settings() -> Settings {
     // Set up the command-line interface.
     let matches = App::new("Paxos")
@@ -207,6 +208,7 @@ fn settings() -> Settings {
 }
 
 // Run the program.
+#[allow(clippy::too_many_lines)]
 fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
     // Initialize the program state.
     let state = Arc::new(RwLock::new(initial()));
@@ -349,9 +351,9 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                 state_for_proposer,
                 &settings.data_file_path,
                 &value,
-            )) as Box<Future<Item = (), Error = ()> + Send>
+            )) as Box<dyn Future<Item = (), Error = ()> + Send>
         } else {
-            Box::new(ok(())) as Box<Future<Item = (), Error = ()> + Send>
+            Box::new(ok(())) as Box<dyn Future<Item = (), Error = ()> + Send>
         };
 
         // Tell the user the address of the server.
