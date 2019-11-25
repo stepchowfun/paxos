@@ -34,6 +34,7 @@ fn generate_proposal_number(
     proposal_number
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn propose(
     client: &Client<HttpConnector>,
     nodes: &[SocketAddrV4],
@@ -157,7 +158,7 @@ pub fn propose(
                         )
                         .fold((), |_, _: ChooseResponse| ok(()))
                         .map(|_| info!("All nodes notified.")),
-                    ) as Box<Future<Item = (), Error = ()> + Send>
+                    ) as Box<dyn Future<Item = (), Error = ()> + Send>
                 } else {
                     // Paxos failed. Start over.
                     info!("Failed to reach consensus. Starting over.");
@@ -170,7 +171,7 @@ pub fn propose(
                         .and_then(move |_| {
                             propose(&client, &nodes, node_index, state, &data_file_path, &value)
                         }),
-                    ) as Box<Future<Item = (), Error = ()> + Send>
+                    ) as Box<dyn Future<Item = (), Error = ()> + Send>
                 }
             })
         })
