@@ -81,7 +81,7 @@ fn settings() -> Settings {
                 .value_name("INDEX")
                 .help("Sets the index of the node corresponding to this instance")
                 .takes_value(true)
-                .required(true), // [tag:node-required]
+                .required(true), // [tag:node_required]
         )
         .arg(
             Arg::with_name(PROPOSE_OPTION)
@@ -153,7 +153,7 @@ fn settings() -> Settings {
         exit(1);
     });
 
-    // Parse the node index. The unwrap is safe due to [ref:node-required].
+    // Parse the node index. The unwrap is safe due to [ref:node_required].
     let node_repr = matches.value_of(NODE_OPTION).unwrap();
     let node_index: usize = node_repr.parse().unwrap_or_else(|e| {
         error!("`{}` is not a valid node index. Reason: {}", node_repr, e);
@@ -161,12 +161,12 @@ fn settings() -> Settings {
     });
     if node_index >= config.nodes.len() {
         error!("There is no node with index {}.", node_repr);
-        exit(1); // [tag:node-index-valid]
+        exit(1); // [tag:node_index_valid]
     }
 
     // Parse the IP address, if given.
     let ip = matches.value_of(IP_OPTION).map_or_else(
-        || *config.nodes[node_index].ip(), // [ref:node-index-valid]
+        || *config.nodes[node_index].ip(), // [ref:node_index_valid]
         |x| {
             x.parse().unwrap_or_else(|e| {
                 error!("`{}` is not a valid IP address. Reason: {}", x, e);
@@ -177,7 +177,7 @@ fn settings() -> Settings {
 
     // Parse the port number, if given.
     let port = matches.value_of(PORT_OPTION).map_or_else(
-        || config.nodes[node_index].port(), // [ref:node-index-valid]
+        || config.nodes[node_index].port(), // [ref:node_index_valid]
         |x| {
             x.parse().unwrap_or_else(|e| {
                 error!("`{}` is not a valid port number. Reason: {}", x, e);
@@ -193,7 +193,7 @@ fn settings() -> Settings {
             .unwrap_or(DATA_DIR_DEFAULT_PATH),
     );
 
-    // Determine the data file path [tag:data-file-path-has-parent].
+    // Determine the data file path [tag:data_file_path_has_parent].
     let data_file_path = Path::join(data_dir_path, format!("{}:{}", ip, port));
 
     // Return the settings.

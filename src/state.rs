@@ -70,7 +70,7 @@ pub fn write(state: &State, path: &Path) -> impl Future<Item = (), Error = Error
     // The `unwrap` is safe because serialization should never fail.
     let payload = bincode::serialize(&state).unwrap();
 
-    // The `unwrap` is safe due to [ref:data-file-path-has-parent].
+    // The `unwrap` is safe due to [ref:data_file_path_has_parent].
     let parent = path.parent().unwrap().to_owned();
 
     // Create the directories if necessary and write the file.
