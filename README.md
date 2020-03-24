@@ -9,7 +9,7 @@ An implementation of single-decree Paxos.
 You can build and install the program with [Cargo](https://doc.rust-lang.org/book/second-edition/ch14-04-installing-binaries.html):
 
 ```sh
-cargo install --force --path .
+cargo install --path .
 ```
 
 You can run that command again to update an existing installation.
