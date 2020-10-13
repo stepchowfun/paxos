@@ -75,7 +75,7 @@ pub fn propose(
             "Preparing value `{}` with proposal number:\n{}",
             value,
             // Serialization is safe.
-            serde_yaml::to_string(&proposal_number).unwrap()
+            serde_yaml::to_string(&proposal_number).unwrap(),
         );
         let prepares = broadcast(
             &nodes,
@@ -114,7 +114,7 @@ pub fn propose(
                 "Requesting acceptance of value `{}` with proposal number:\n{}",
                 value_for_accept,
                 // The `unwrap` is safe because serialization should never fail.
-                serde_yaml::to_string(&proposal_number).unwrap()
+                serde_yaml::to_string(&proposal_number).unwrap(),
             );
             let accepts = broadcast(
                 &nodes,
