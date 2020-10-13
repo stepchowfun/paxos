@@ -343,18 +343,19 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
             .map_err(|e| error!("Server error: {}", e));
 
         // Propose a value if applicable.
-        let client = if let Some(value) = settings.proposal {
-            Box::new(propose(
-                &Client::new(),
-                &settings.nodes,
-                settings.node_index,
-                state_for_proposer,
-                &settings.data_file_path,
-                &value,
-            )) as Box<dyn Future<Item = (), Error = ()> + Send>
-        } else {
-            Box::new(ok(())) as Box<dyn Future<Item = (), Error = ()> + Send>
-        };
+        let client = settings.proposal.as_ref().map_or_else(
+            || Box::new(ok(())) as Box<dyn Future<Item = (), Error = ()> + Send>,
+            |value| {
+                Box::new(propose(
+                    &Client::new(),
+                    &settings.nodes,
+                    settings.node_index,
+                    state_for_proposer,
+                    &settings.data_file_path,
+                    &value,
+                )) as Box<dyn Future<Item = (), Error = ()> + Send>
+            },
+        );
 
         // Tell the user the address of the server.
         info!("Listening on http://{}", address);

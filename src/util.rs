@@ -110,24 +110,23 @@ pub fn when<I: 'static + Send, R: 'static + Send, K: 'static + Send + Fn(&[I]) -
         mut acc: Vec<I>,
         k: K,
     ) -> impl Send + Future<Item = R, Error = ()> {
-        if let Some(result) = k(&acc) {
-            Box::new(ok(result)) as Box<dyn Future<Item = R, Error = ()> + Send>
-        } else {
-            Box::new(stream.into_future().then(|result| match result {
-                Ok((x, s)) => {
-                    if let Some(r) = x {
-                        acc.push(r);
-                        Box::new(when_rec(s, acc, k))
-                            as Box<dyn Future<Item = R, Error = ()> + Send>
-                    } else {
-                        Box::new(err(())) as Box<dyn Future<Item = R, Error = ()> + Send>
-                    }
-                }
-                Err((_, s)) => {
-                    Box::new(when_rec(s, acc, k)) as Box<dyn Future<Item = R, Error = ()> + Send>
-                }
-            })) as Box<dyn Future<Item = R, Error = ()> + Send>
-        }
+        k(&acc).map_or_else(
+            || {
+                Box::new(stream.into_future().then(|result| match result {
+                    Ok((x, s)) => x.map_or_else(
+                        || Box::new(err(())) as Box<dyn Future<Item = R, Error = ()> + Send>,
+                        |r| {
+                            acc.push(r);
+                            Box::new(when_rec(s, acc, k))
+                                as Box<dyn Future<Item = R, Error = ()> + Send>
+                        },
+                    ),
+                    Err((_, s)) => Box::new(when_rec(s, acc, k))
+                        as Box<dyn Future<Item = R, Error = ()> + Send>,
+                })) as Box<dyn Future<Item = R, Error = ()> + Send>
+            },
+            |result| Box::new(ok(result)) as Box<dyn Future<Item = R, Error = ()> + Send>,
+        )
     }
 
     when_rec(stream, Vec::new(), k)
