@@ -119,6 +119,7 @@ tasks:
     dependencies:
       - fetch_crates
     input_paths:
+      - resources
       - src
     user: user
     command: |

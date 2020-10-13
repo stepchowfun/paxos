@@ -81,7 +81,7 @@ fn settings() -> Settings {
                 .value_name("INDEX")
                 .help("Sets the index of the node corresponding to this instance")
                 .takes_value(true)
-                .required(true), // [tag:node_required]
+                .required(true), // [tag:node_required] ,
         )
         .arg(
             Arg::with_name(PROPOSE_OPTION)
@@ -148,7 +148,7 @@ fn settings() -> Settings {
     let config = config::parse(&config_data).unwrap_or_else(|e| {
         error!(
             "Unable to parse file `{}`. Reason: {}.",
-            config_file_path, e
+            config_file_path, e,
         );
         exit(1);
     });
@@ -263,10 +263,11 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                                             // The `unwrap` is safe since it can only fail if a
                                             // panic already happened.
                                             let mut state_borrow = state.write().unwrap();
-                                            acceptor::$x(&payload, &mut state_borrow)
-                                        }
+
+                                            acceptor::$x(&payload, &mut state_borrow) // ,
+                                        },
                                     ).map_err(|e|
-                                        Box::new(e) as Box<dyn Error + Send + Sync>
+                                        Box::new(e) as Box<dyn Error + Send + Sync> // ,
                                     ).and_then(move |response| {
                                         let state = state_for_write.clone();
                                         let settings = settings.clone();
@@ -278,15 +279,15 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                                         state::write(&state_borrow, &settings.data_file_path)
                                             .map(|_| response)
                                             .map_err(|e|
-                                                Box::new(e) as Box<dyn Error + Send + Sync>
+                                                Box::new(e) as Box<dyn Error + Send + Sync> // ,
                                             )
                                     }).map(|response|
                                         Response::new(Body::from(
                                             // The `unwrap` is safe because serialization should
                                             // never fail.
                                             bincode::serialize(&response).unwrap(),
-                                        ))
-                                    )
+                                        )),
+                                    ),
                                   )
                               };
                           }
@@ -311,7 +312,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                                 };
                                 Box::new(ok(Response::new(Body::from(format!(
                                     "System operational.\n\n{}",
-                                    state_repr
+                                    state_repr,
                                 )))))
                             }
 
@@ -402,7 +403,7 @@ fn main() {
                 &Wrapper::with_termwidth()
                     .initial_indent(indent)
                     .subsequent_indent(indent)
-                    .fill(&record.args().to_string())[indent_size..]
+                    .fill(&record.args().to_string())[indent_size..],
             )
         })
         .init();
