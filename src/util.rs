@@ -19,6 +19,7 @@ const EXPONENTIAL_BACKOFF_MAX: Duration = Duration::from_secs(10);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Repeat a future until it succeeds with truncated binary exponential backoff on retries.
+#[allow(clippy::map_err_ignore)]
 pub fn repeat<
     I: 'static + Send,
     R: 'static + Send + Future<Item = I, Error = ()>,
@@ -54,6 +55,7 @@ pub fn repeat<
 
 // Send a message to all nodes. This function will automatically retry each request until it
 // succeeds.
+#[allow(clippy::map_err_ignore)]
 pub fn broadcast<
     P: 'static + Send + Sync + Clone + Serialize,
     R: 'static + Send + Sync + DeserializeOwned,

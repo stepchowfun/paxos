@@ -34,6 +34,7 @@ fn generate_proposal_number(
     proposal_number
 }
 
+#[allow(clippy::map_err_ignore)]
 #[allow(clippy::too_many_lines)]
 pub fn propose(
     client: &Client<HttpConnector>,
