@@ -99,10 +99,37 @@ tasks:
     command: |
       set -euo pipefail
       . $HOME/.cargo/env
+
+      # Lint Rust files.
       cargo clippy --all-targets --all-features -- \
         --deny warnings --deny clippy::all --deny clippy::pedantic
-      cargo fmt --all -- --check
+
+      # Check code formatting.
+      if ! cargo fmt --all -- --check; then
+        echo 'ERROR: Please correct the formatting errors above.' 1>&2
+        exit 1
+      fi
+
+      # Check references.
       tagref
+
+      # Enforce that lines span no more than 100 columns.
+      if rg --line-number --type rust '.{101}'; then
+        echo "There are lines spanning more than 100 columns." >&2
+        exit 1
+      fi
+
+      # Enforce trailing commas in multi-line sequences.
+      if rg --line-number --multiline --type rust '[^,]\n(\s*)\)'; then
+        echo "There are multi-line sequences without trailing commas." >&2
+        exit 1
+      fi
+
+      # Forbid trailing commas in single-line sequences.
+      if rg --line-number --type rust '[^(],\s*\)'; then
+        echo "There are single-line sequences with trailing commas." >&2
+        exit 1
+      fi
 
   run:
     description: Run the program.
@@ -125,34 +152,8 @@ tasks:
     command: |
       set -euo pipefail
       . $HOME/.cargo/env
-
-      # Lint Rust files.
-      cargo clippy --all-targets --all-features -- \
-        --deny warnings --deny clippy::all --deny clippy::pedantic
-
-      # Check code formatting.
-      cargo fmt --all -- --check || echo 'ERROR: Please correct the formatting errors above.' 1>&2
-
-      # Check references.
-      tagref
-
-      # Enforce that lines span no more than 100 columns.
-      if rg --line-number --type rust '.{101}'; then
-        echo "There are lines spanning more than 100 columns." >&2
-        exit 1
-      fi
-
-      # Enforce trailing commas in multi-line sequences.
-      if rg --line-number --multiline --type rust '[^,]\n(\s*)\)'; then
-        echo "There are multi-line sequences without trailing commas." >&2
-        exit 1
-      fi
-
-      # Forbid trailing commas in single-line sequences.
-      if rg --line-number --type rust '[^(],\s*\)'; then
-        echo "There are single-line sequences with trailing commas." >&2
-        exit 1
-      fi
+      find src -type f -name '*.rs' -exec touch {} +
+      cargo check --all --all-targets --all-features
 
   format:
     description: Format the source code.
