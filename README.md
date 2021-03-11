@@ -1,6 +1,6 @@
 # Paxos
 
-[![Build status](https://github.com/stepchowfun/paxos/workflows/Continuous%20integration/badge.svg?branch=master)](https://github.com/stepchowfun/paxos/actions?query=branch%3Amaster)
+[![Build status](https://github.com/stepchowfun/paxos/workflows/Continuous%20integration/badge.svg?branch=main)](https://github.com/stepchowfun/paxos/actions?query=branch%3Amain)
 
 An implementation of single-decree Paxos.
 
