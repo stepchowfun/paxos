@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 mod acceptor;
 mod config;
 mod proposer;
