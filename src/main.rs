@@ -9,11 +9,7 @@ mod util;
 #[macro_use]
 extern crate log;
 
-use clap::{
-    App,
-    AppSettings::{ColoredHelp, UnifiedHelpMessage, VersionlessSubcommands},
-    Arg,
-};
+use clap::{App, AppSettings, Arg};
 use env_logger::{fmt::Color, Builder};
 use futures::{future::ok, stream::Stream};
 use hyper::{
@@ -80,9 +76,10 @@ fn settings() -> Settings {
         .version(VERSION)
         .author("Stephan Boyer <stephan@stephanboyer.com>")
         .about("This is an implementation of single-decree paxos.")
-        .setting(ColoredHelp)
-        .setting(UnifiedHelpMessage)
-        .setting(VersionlessSubcommands)
+        .setting(AppSettings::ColoredHelp)
+        .setting(AppSettings::NextLineHelp)
+        .setting(AppSettings::UnifiedHelpMessage)
+        .setting(AppSettings::VersionlessSubcommands)
         .arg(
             Arg::with_name(NODE_OPTION)
                 .value_name("INDEX")

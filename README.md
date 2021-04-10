@@ -32,19 +32,18 @@ Here are the full usage instructions:
 
 ```
 USAGE:
-    paxos [OPTIONS] --node <INDEX>
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+    paxos --node <INDEX>
 
 OPTIONS:
     -c, --config-file <PATH>
             Sets the path of the config file (default: config.yml)
 
     -d, --data-dir <PATH>
-            Sets the path of the directory in which to store persistent data
-            (default: data)
+            Sets the path of the directory in which to store persistent data (default: data)
+
+    -h, --help
+            Prints help information
+
     -i, --ip <ADDRESS>
             Sets the IP address to run on (if different from the configuration)
 
@@ -54,7 +53,11 @@ OPTIONS:
     -p, --port <PORT>
             Sets the port to run on (if different from the configuration)
 
-    -v, --propose <VALUE>       Proposes a value to the cluster
+    -v, --propose <VALUE>
+            Proposes a value to the cluster
+
+    -V, --version
+            Prints version information
 ```
 
 ## References
