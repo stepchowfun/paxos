@@ -43,7 +43,7 @@ pub struct ChooseResponse;
 pub fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
     info!(
         "Received prepare message:\n{}",
-        serde_yaml::to_string(request).unwrap() // Serialization is safe. ,
+        serde_yaml::to_string(request).unwrap(), // Serialization is safe. ,
     );
 
     match &state.min_proposal_number {
@@ -65,7 +65,7 @@ pub fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
 pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
     info!(
         "Received accept message:\n{}",
-        serde_yaml::to_string(request).unwrap() // Serialization is safe. ,
+        serde_yaml::to_string(request).unwrap(), // Serialization is safe. ,
     );
     if state
         .min_proposal_number
