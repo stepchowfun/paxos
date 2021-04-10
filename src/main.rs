@@ -78,62 +78,56 @@ fn settings() -> Settings {
         .about("This is an implementation of single-decree paxos.")
         .arg(
             Arg::with_name(NODE_OPTION)
+                .value_name("INDEX")
                 .short("n")
                 .long(NODE_OPTION)
-                .value_name("INDEX")
                 .help("Sets the index of the node corresponding to this instance")
-                .takes_value(true)
                 .required(true), // [tag:node_required] ,
         )
         .arg(
             Arg::with_name(PROPOSE_OPTION)
+                .value_name("VALUE")
                 .short("v")
                 .long(PROPOSE_OPTION)
-                .value_name("VALUE")
-                .help("Proposes a value to the cluster")
-                .takes_value(true),
+                .help("Proposes a value to the cluster"),
         )
         .arg(
             Arg::with_name(CONFIG_FILE_OPTION)
+                .value_name("PATH")
                 .short("c")
                 .long(CONFIG_FILE_OPTION)
-                .value_name("PATH")
                 .help(&format!(
                     "Sets the path of the config file (default: {})",
                     CONFIG_FILE_DEFAULT_PATH,
-                ))
-                .takes_value(true),
+                )),
         )
         .arg(
             Arg::with_name(DATA_DIR_OPTION)
+                .value_name("PATH")
                 .short("d")
                 .long(DATA_DIR_OPTION)
-                .value_name("PATH")
                 .help(&format!(
                     "Sets the path of the directory in which to store persistent data \
                      (default: {})",
                     DATA_DIR_DEFAULT_PATH,
-                ))
-                .takes_value(true),
+                )),
         )
         .arg(
             Arg::with_name(IP_OPTION)
+                .value_name("ADDRESS")
                 .short("i")
                 .long(IP_OPTION)
-                .value_name("ADDRESS")
                 .help(
                     "Sets the IP address to run on \
                      (if different from the configuration)",
-                )
-                .takes_value(true),
+                ),
         )
         .arg(
             Arg::with_name(PORT_OPTION)
+                .value_name("PORT")
                 .short("p")
                 .long(PORT_OPTION)
-                .value_name("PORT")
-                .help("Sets the port to run on (if different from the configuration)")
-                .takes_value(true),
+                .help("Sets the port to run on (if different from the configuration)"),
         )
         .get_matches();
 
