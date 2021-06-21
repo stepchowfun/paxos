@@ -86,7 +86,7 @@ pub fn broadcast<
                     )
                     .and_then(|response| {
                         response.into_body().concat2().map(|body| {
-                            bincode::deserialize(&body.iter().cloned().collect::<Vec<u8>>())
+                            bincode::deserialize(&body.iter().copied().collect::<Vec<u8>>())
                                 .unwrap() // Safe under non-Byzantine conditions
                         })
                     })
