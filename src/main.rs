@@ -148,7 +148,8 @@ fn settings() -> Settings {
     let config = config::parse(&config_data).unwrap_or_else(|e| {
         error!(
             "Unable to parse file `{}`. Reason: {}.",
-            config_file_path, e,
+            config_file_path,
+            e,
         );
         exit(1);
     });

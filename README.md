@@ -4,15 +4,46 @@
 
 An implementation of single-decree Paxos.
 
-## Installation
+## Installation instructions
 
-You can build and install the program with [Cargo](https://doc.rust-lang.org/book/second-edition/ch14-04-installing-binaries.html):
+### Easy installation on macOS or Linux
+
+If you are running macOS or Linux on an x86-64 CPU, you can install Paxos with this command:
 
 ```sh
-cargo install --path .
+curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | sh
 ```
 
-You can run that command again to update an existing installation.
+The same command can be used again to update Paxos to the latest version.
+
+**NOTE:** Piping `curl` to `sh` is considered dangerous by some since the server might be compromised. If you're concerned about this, you can download and inspect the installation script or choose one of the other installation methods.
+
+#### Customizing the installation
+
+The installation script supports the following environment variables:
+
+- `VERSION=x.y.z` (defaults to the latest version)
+- `PREFIX=/path/to/install` (defaults to `/usr/local/bin`)
+
+For example, the following will install Paxos into the working directory:
+
+```sh
+curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | PREFIX=. sh
+```
+
+### Manual installation for macOS, Linux, or Windows
+
+The [releases page](https://github.com/stepchowfun/paxos/releases) has precompiled binaries for macOS, Linux, and Windows systems running on an x86-64 CPU. You can download one of them and place it in a directory listed in your [`PATH`](https://en.wikipedia.org/wiki/PATH_\(variable\)).
+
+### Installation with Cargo
+
+If you have [Cargo](https://doc.rust-lang.org/cargo/), you can install Paxos as follows:
+
+```sh
+cargo install paxos
+```
+
+You can run that command with `--force` to update an existing installation.
 
 ## Configuration
 
