@@ -82,7 +82,7 @@ pub fn broadcast<
                                 // The `unwrap` is safe because serialization should never fail.
                                 bincode::serialize(&payload).unwrap(),
                             ))
-                            .unwrap(), // Safe since we constructed a well-formed request ,
+                            .unwrap(), // Safe since we constructed a well-formed request
                     )
                     .and_then(|response| {
                         response.into_body().concat2().map(|body| {
