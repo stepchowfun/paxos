@@ -86,7 +86,7 @@ fn settings() -> Settings {
                 .short("n")
                 .long(NODE_OPTION)
                 .help("Sets the index of the node corresponding to this instance")
-                .required(true), // [tag:node_required] ,
+                .required(true), // [tag:node_required]
         )
         .arg(
             Arg::with_name(PROPOSE_OPTION)
@@ -265,10 +265,10 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                                             // panic already happened.
                                             let mut state_borrow = state.write().unwrap();
 
-                                            acceptor::$x(&payload, &mut state_borrow) // ,
+                                            acceptor::$x(&payload, &mut state_borrow)
                                         },
                                     ).map_err(|e|
-                                        Box::new(e) as Box<dyn Error + Send + Sync> // ,
+                                        Box::new(e) as Box<dyn Error + Send + Sync>
                                     ).and_then(move |response| {
                                         let state = state_for_write.clone();
                                         let settings = settings.clone();
@@ -280,7 +280,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                                         state::write(&state_borrow, &settings.data_file_path)
                                             .map(|_| response)
                                             .map_err(|e|
-                                                Box::new(e) as Box<dyn Error + Send + Sync> // ,
+                                                Box::new(e) as Box<dyn Error + Send + Sync>
                                             )
                                     }).map(|response|
                                         Response::new(Body::from(
