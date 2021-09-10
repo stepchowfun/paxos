@@ -354,7 +354,7 @@ fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
                     settings.node_index,
                     state_for_proposer,
                     &settings.data_file_path,
-                    &value,
+                    value,
                 )) as Box<dyn Future<Item = (), Error = ()> + Send>
             },
         );
