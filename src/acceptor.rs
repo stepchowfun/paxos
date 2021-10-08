@@ -1,5 +1,7 @@
-use crate::state::{ProposalNumber, State};
-use serde::{Deserialize, Serialize};
+use {
+    crate::state::{ProposalNumber, State},
+    serde::{Deserialize, Serialize},
+};
 
 // Endpoints
 pub const PREPARE_ENDPOINT: &str = "/prepare";
@@ -93,8 +95,10 @@ pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::acceptor::{accept, choose, prepare, AcceptRequest, ChooseRequest, PrepareRequest};
-    use crate::state::{initial, ProposalNumber};
+    use crate::{
+        acceptor::{accept, choose, prepare, AcceptRequest, ChooseRequest, PrepareRequest},
+        state::{initial, ProposalNumber},
+    };
 
     #[test]
     fn prepare_initializes_min_proposal_number() {

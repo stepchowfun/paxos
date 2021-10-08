@@ -1,5 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddrV4;
+use {
+    serde::{Deserialize, Serialize},
+    std::net::SocketAddrV4,
+};
 
 // A program configuration
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -15,8 +17,10 @@ pub fn parse(config: &str) -> Result<Config, String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{parse, Config};
-    use std::net::{Ipv4Addr, SocketAddrV4};
+    use {
+        crate::config::{parse, Config},
+        std::net::{Ipv4Addr, SocketAddrV4},
+    };
 
     #[test]
     fn parse_empty() {

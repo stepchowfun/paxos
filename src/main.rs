@@ -9,31 +9,33 @@ mod util;
 #[macro_use]
 extern crate log;
 
-use clap::{App, AppSettings, Arg};
-use env_logger::{fmt::Color, Builder};
-use futures::{future::ok, stream::Stream};
-use hyper::{
-    header::CONTENT_TYPE, service::service_fn, Body, Client, Method, Request, Response, Server,
-    StatusCode,
+use {
+    clap::{App, AppSettings, Arg},
+    env_logger::{fmt::Color, Builder},
+    futures::{future::ok, stream::Stream},
+    hyper::{
+        header::CONTENT_TYPE, service::service_fn, Body, Client, Method, Request, Response, Server,
+        StatusCode,
+    },
+    log::{Level, LevelFilter},
+    proposer::propose,
+    state::{initial, State},
+    std::{
+        env,
+        error::Error,
+        fs,
+        io::Write,
+        net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+        path::{Path, PathBuf},
+        process::exit,
+        str::FromStr,
+        string::ToString,
+        sync::{Arc, RwLock},
+        time::Duration,
+    },
+    textwrap::Wrapper,
+    tokio::prelude::{Future, FutureExt},
 };
-use log::{Level, LevelFilter};
-use proposer::propose;
-use state::{initial, State};
-use std::{
-    env,
-    error::Error,
-    fs,
-    io::Write,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    path::{Path, PathBuf},
-    process::exit,
-    str::FromStr,
-    string::ToString,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
-use textwrap::Wrapper;
-use tokio::prelude::{Future, FutureExt};
 
 // The program version
 const VERSION: &str = env!("CARGO_PKG_VERSION");

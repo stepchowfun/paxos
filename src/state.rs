@@ -1,16 +1,18 @@
-use crate::util::fsync;
-use futures::{
-    future::{err, ok},
-    prelude::Future,
+use {
+    crate::util::fsync,
+    futures::{
+        future::{err, ok},
+        prelude::Future,
+    },
+    serde::{Deserialize, Serialize},
+    std::{
+        cmp::Ordering,
+        io::{Error, ErrorKind::InvalidData},
+        path::Path,
+        sync::{Arc, RwLock},
+    },
+    tokio::{fs, fs::File},
 };
-use serde::{Deserialize, Serialize};
-use std::{
-    cmp::Ordering,
-    io::{Error, ErrorKind::InvalidData},
-    path::Path,
-    sync::{Arc, RwLock},
-};
-use tokio::{fs, fs::File};
 
 // A representation of a proposal number
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -1,19 +1,21 @@
-use crate::acceptor::{
-    AcceptRequest, AcceptResponse, ChooseRequest, ChooseResponse, PrepareRequest, PrepareResponse,
-    ACCEPT_ENDPOINT, CHOOSE_ENDPOINT, PREPARE_ENDPOINT,
+use {
+    crate::acceptor::{
+        AcceptRequest, AcceptResponse, ChooseRequest, ChooseResponse, PrepareRequest,
+        PrepareResponse, ACCEPT_ENDPOINT, CHOOSE_ENDPOINT, PREPARE_ENDPOINT,
+    },
+    crate::state::{ProposalNumber, State},
+    crate::util::{broadcast, when},
+    futures::{future::ok, prelude::Future, stream::Stream},
+    hyper::{client::HttpConnector, Client},
+    rand::{thread_rng, Rng},
+    std::{
+        net::SocketAddrV4,
+        path::Path,
+        sync::{Arc, RwLock},
+        time::{Duration, Instant},
+    },
+    tokio::timer::Delay,
 };
-use crate::state::{ProposalNumber, State};
-use crate::util::{broadcast, when};
-use futures::{future::ok, prelude::Future, stream::Stream};
-use hyper::{client::HttpConnector, Client};
-use rand::{thread_rng, Rng};
-use std::{
-    net::SocketAddrV4,
-    path::Path,
-    sync::{Arc, RwLock},
-    time::{Duration, Instant},
-};
-use tokio::timer::Delay;
 
 // Duration constants
 const RESTART_DELAY_MIN: Duration = Duration::from_millis(0);
@@ -181,9 +183,10 @@ pub fn propose(
 
 #[cfg(test)]
 mod tests {
-    use crate::proposer::generate_proposal_number;
-    use crate::state::initial;
-    use std::net::{Ipv4Addr, SocketAddrV4};
+    use {
+        crate::{proposer::generate_proposal_number, state::initial},
+        std::net::{Ipv4Addr, SocketAddrV4},
+    };
 
     #[test]
     fn first_proposal_number() {
