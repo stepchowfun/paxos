@@ -4,40 +4,9 @@
 
 An implementation of single-decree Paxos.
 
-## Installation instructions
-
-### Installation on macOS or Linux (x86-64)
-
-If you're running macOS or Linux on an x86-64 CPU, you can install Paxos with this command:
-
-```sh
-curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | sh
-```
-
-The same command can be used again to update to the latest version.
-
-The installation script supports the following optional environment variables:
-
-- `VERSION=x.y.z` (defaults to the latest version)
-- `PREFIX=/path/to/install` (defaults to `/usr/local/bin`)
-
-For example, the following will install Paxos into the working directory:
-
-```sh
-curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | PREFIX=. sh
-```
-
-If you prefer not to use this installation method, you can download the binary from the [releases page](https://github.com/stepchowfun/paxos/releases), make it executable (e.g., with `chmod`), and place it in some directory in your [`PATH`](https://en.wikipedia.org/wiki/PATH_\(variable\)) (e.g., `/usr/local/bin`).
-
-### Installation on Windows (x86-64)
-
-If you're running Windows on an x86-64 CPU, download the latest binary from the [releases page](https://github.com/stepchowfun/paxos/releases) and rename it to `paxos` (or `paxos.exe` if you have file extensions visible). Create a directory called `Paxos` in your `%PROGRAMFILES%` directory (e.g., `C:\Program Files\Paxos`), and place the renamed binary in there. Then, in the "Advanced" tab of the "System Properties" section of Control Panel, click on "Environment Variables..." and add the full path to the new `Paxos` directory to the `PATH` variable under "System variables". Note that the `Program Files` directory might have a different name if Windows is configured for language other than English.
-
-To update to an existing installation, simply replace the existing binary.
-
 ## Configuration
 
-By default, the program looks for a configuration file named `config.yml` in the working directory. This file describes the cluster membership. An example configuration is provided in this repository.
+By default, the program looks for a configuration file named `config.yml` in the working directory. This file describes the cluster membership. An [example configuration](https://github.com/stepchowfun/paxos/blob/main/config.yml) is provided in this repository.
 
 ## Usage
 
@@ -80,6 +49,37 @@ OPTIONS:
     -V, --version
             Prints version information
 ```
+
+## Installation instructions
+
+### Installation on macOS or Linux (x86-64)
+
+If you're running macOS or Linux on an x86-64 CPU, you can install Paxos with this command:
+
+```sh
+curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | sh
+```
+
+The same command can be used again to update to the latest version.
+
+The installation script supports the following optional environment variables:
+
+- `VERSION=x.y.z` (defaults to the latest version)
+- `PREFIX=/path/to/install` (defaults to `/usr/local/bin`)
+
+For example, the following will install Paxos into the working directory:
+
+```sh
+curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | PREFIX=. sh
+```
+
+If you prefer not to use this installation method, you can download the binary from the [releases page](https://github.com/stepchowfun/paxos/releases), make it executable (e.g., with `chmod`), and place it in some directory in your [`PATH`](https://en.wikipedia.org/wiki/PATH_\(variable\)) (e.g., `/usr/local/bin`).
+
+### Installation on Windows (x86-64)
+
+If you're running Windows on an x86-64 CPU, download the latest binary from the [releases page](https://github.com/stepchowfun/paxos/releases) and rename it to `paxos` (or `paxos.exe` if you have file extensions visible). Create a directory called `Paxos` in your `%PROGRAMFILES%` directory (e.g., `C:\Program Files\Paxos`), and place the renamed binary in there. Then, in the "Advanced" tab of the "System Properties" section of Control Panel, click on "Environment Variables..." and add the full path to the new `Paxos` directory to the `PATH` variable under "System variables". Note that the `Program Files` directory might have a different name if Windows is configured for language other than English.
+
+To update to an existing installation, simply replace the existing binary.
 
 ## References
 
