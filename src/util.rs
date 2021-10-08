@@ -1,17 +1,19 @@
-use futures::{
-    future::{err, ok},
-    prelude::Future,
-    stream::{self, Stream},
-    Poll,
+use {
+    futures::{
+        future::{err, ok},
+        prelude::Future,
+        stream::{self, Stream},
+        Poll,
+    },
+    hyper::{client::HttpConnector, Body, Client, Method, Request},
+    serde::{de::DeserializeOwned, Serialize},
+    std::net::SocketAddrV4,
+    std::{
+        cmp::min,
+        time::{Duration, Instant},
+    },
+    tokio::{fs::file::File, io::Error, prelude::FutureExt, timer::Delay},
 };
-use hyper::{client::HttpConnector, Body, Client, Method, Request};
-use serde::{de::DeserializeOwned, Serialize};
-use std::net::SocketAddrV4;
-use std::{
-    cmp::min,
-    time::{Duration, Instant},
-};
-use tokio::{fs::file::File, io::Error, prelude::FutureExt, timer::Delay};
 
 // Duration constants
 const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(100);
