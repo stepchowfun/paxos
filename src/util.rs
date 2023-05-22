@@ -18,6 +18,7 @@ use {
 // Duration constants
 const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(100);
 const EXPONENTIAL_BACKOFF_MAX: Duration = Duration::from_secs(10);
+const EXPONENTIAL_BACKOFF_MULTIPLIER: u32 = 2;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Repeat a future until it succeeds with truncated binary exponential backoff on retries.
@@ -45,7 +46,13 @@ pub fn repeat<
                     Delay::new(Instant::now() + delay)
                         .map_err(|_| ())
                         .and_then(move |_| {
-                            repeat_rec(constructor, min(delay * 2, EXPONENTIAL_BACKOFF_MAX))
+                            repeat_rec(
+                                constructor,
+                                min(
+                                    delay * EXPONENTIAL_BACKOFF_MULTIPLIER,
+                                    EXPONENTIAL_BACKOFF_MAX,
+                                ),
+                            )
                         }),
                 ) as Box<dyn Future<Item = I, Error = ()> + Send>
             }
