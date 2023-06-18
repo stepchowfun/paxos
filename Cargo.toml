@@ -1,6 +1,6 @@
 [package]
 name = "paxos"
-version = "1.0.3"
+version = "1.0.4"
 authors = ["Stephan Boyer <stephan@stephanboyer.com>"]
 edition = "2021"
 description = "An implementation of single-decree Paxos."
@@ -12,7 +12,7 @@ readme = "README.md"
 
 [dependencies]
 bincode = "1"
-env_logger = "0.6"
+env_logger = "0.10"
 futures = "0.1"
 hyper = "0.12"
 log = "0.4"
