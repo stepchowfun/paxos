@@ -13,18 +13,27 @@ readme = "README.md"
 [dependencies]
 bincode = "1"
 env_logger = "0.10"
-futures = "0.1"
-hyper = "0.12"
+futures = "0.3"
 log = "0.4"
-rand = "0.6"
-serde_yaml = "0.8"
-textwrap = "0.11"
-tokio = "0.1"
+rand = "0.8"
+serde_yaml = "0.9"
 
 [dependencies.clap]
 version = "2"
 features = ["wrap_help"]
 
+[dependencies.hyper]
+version = "0.14"
+features = ["full"]
+
 [dependencies.serde]
 version = "1"
 features = ["derive"]
+
+[dependencies.textwrap]
+version = "0.16"
+features = ["hyphenation", "smawk", "terminal_size", "unicode-linebreak", "unicode-width"]
+
+[dependencies.tokio]
+version = "1"
+features = ["full"]

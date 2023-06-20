@@ -1,17 +1,10 @@
 use {
-    crate::util::fsync,
-    futures::{
-        future::{err, ok},
-        prelude::Future,
-    },
     serde::{Deserialize, Serialize},
-    std::{
-        cmp::Ordering,
-        io::{Error, ErrorKind::InvalidData},
-        path::Path,
-        sync::{Arc, RwLock},
+    std::{cmp::Ordering, io, net::SocketAddr, path::Path},
+    tokio::{
+        fs::{create_dir_all, File},
+        io::{AsyncReadExt, AsyncWriteExt},
     },
-    tokio::{fs, fs::File},
 };
 
 // A representation of a proposal number
@@ -19,19 +12,14 @@ use {
 #[serde(deny_unknown_fields)]
 pub struct ProposalNumber {
     pub round: u64,
-    pub proposer_ip: u32,
-    pub proposer_port: u16,
+    pub proposer_address: SocketAddr,
 }
 
 // We implement a custom ordering to ensure that round number takes precedence over proposer.
 impl Ord for ProposalNumber {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.round == other.round {
-            if self.proposer_ip == other.proposer_ip {
-                self.proposer_port.cmp(&other.proposer_port)
-            } else {
-                self.proposer_ip.cmp(&other.proposer_ip)
-            }
+            self.proposer_address.cmp(&other.proposer_address)
         } else {
             self.round.cmp(&other.round)
         }
@@ -65,10 +53,7 @@ pub fn initial() -> State {
 }
 
 // Write the state to a file.
-pub fn write(state: &State, path: &Path) -> impl Future<Item = (), Error = Error> {
-    // Clone some data that will outlive this function.
-    let path = path.to_owned();
-
+pub async fn write(state: &State, path: &Path) -> io::Result<()> {
     // The `unwrap` is safe because serialization should never fail.
     let payload = bincode::serialize(&state).unwrap();
 
@@ -76,54 +61,49 @@ pub fn write(state: &State, path: &Path) -> impl Future<Item = (), Error = Error
     let parent = path.parent().unwrap().to_owned();
 
     // Create the directories if necessary and write the file.
-    fs::create_dir_all(parent).and_then(move |_| {
-        File::create(path).and_then(move |file| {
-            tokio::io::write_all(file, payload).and_then(|(file, _)| fsync(file))
-        })
-    })
+    create_dir_all(parent).await?;
+    let mut file = File::create(path).await?;
+    file.write_all(&payload).await?;
+    file.sync_all().await
 }
 
 // Read the state from a file.
-pub fn read(state: Arc<RwLock<State>>, path: &Path) -> impl Future<Item = (), Error = Error> {
-    // Clone some data that will outlive this function.
-    let path = path.to_owned();
+pub async fn read(path: &Path) -> io::Result<State> {
+    // Read the file into a buffer.
+    let mut file = File::open(path).await?;
+    let mut contents = vec![];
+    file.read_to_end(&mut contents).await?;
 
-    // Do the read.
-    fs::read(path).and_then(move |data| {
-        // The `unwrap` is safe since it can only fail if a panic already happened.
-        let mut state_borrow = state.write().unwrap();
-
-        bincode::deserialize(&data).ok().map_or_else(
-            || {
-                err(Error::new(
-                    InvalidData,
-                    "Unable to deserialize the persisted state.",
-                ))
-            },
-            |result| {
-                *state_borrow = result;
-                ok(())
-            },
+    // Deserialize the data.
+    bincode::deserialize(&contents).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Error loading state file `{}`. Reason: {}",
+                path.to_string_lossy(),
+                error,
+            ),
         )
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::state::ProposalNumber;
+    use {
+        crate::state::ProposalNumber,
+        std::net::{IpAddr, Ipv4Addr, SocketAddr},
+    };
 
     #[test]
     fn proposal_ord_round() {
         let pn0 = ProposalNumber {
             round: 0,
-            proposer_ip: 1,
-            proposer_port: 1,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)), 8081),
         };
 
         let pn1 = ProposalNumber {
             round: 1,
-            proposer_ip: 0,
-            proposer_port: 0,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         };
 
         assert!(pn1 > pn0);
@@ -133,14 +113,12 @@ mod tests {
     fn proposal_ord_proposer_ip() {
         let pn0 = ProposalNumber {
             round: 0,
-            proposer_ip: 0,
-            proposer_port: 1,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081),
         };
 
         let pn1 = ProposalNumber {
             round: 0,
-            proposer_ip: 1,
-            proposer_port: 0,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)), 8080),
         };
 
         assert!(pn1 > pn0);
@@ -150,14 +128,12 @@ mod tests {
     fn proposal_ord_proposer_port() {
         let pn0 = ProposalNumber {
             round: 0,
-            proposer_ip: 0,
-            proposer_port: 0,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         };
 
         let pn1 = ProposalNumber {
             round: 0,
-            proposer_ip: 0,
-            proposer_port: 1,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081),
         };
 
         assert!(pn1 > pn0);
