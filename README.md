@@ -2,7 +2,7 @@
 
 [![Build status](https://github.com/stepchowfun/paxos/workflows/Continuous%20integration/badge.svg?branch=main)](https://github.com/stepchowfun/paxos/actions?query=branch%3Amain)
 
-An reference implementation of single-decree Paxos.
+This is a reference implementation of single-decree Paxos.
 
 ## Configuration
 
@@ -10,13 +10,15 @@ By default, the program looks for a configuration file named `config.yml` in the
 
 ## Usage
 
-For a simple demonstration, run the following commands in separate terminals:
+For a simple demonstration, run the following commands from separate terminals in the repository root:
 
 ```sh
 paxos --node 0 --propose foo
 paxos --node 1 --propose bar
 paxos --node 2 --propose baz
 ```
+
+The cluster will likely achieve consensus immediately after two of the three nodes have been started. The chosen value will be printed to STDOUT by each node in the cluster.
 
 Here are the full usage instructions:
 

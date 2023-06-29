@@ -21,6 +21,113 @@ const EXPONENTIAL_BACKOFF_MULTIPLIER: u32 = 2;
 const RESTART_DELAY_MIN: Duration = Duration::from_millis(0);
 const RESTART_DELAY_MAX: Duration = Duration::from_millis(100);
 
+// Propose a value to the cluster.
+pub async fn propose(
+    state: Arc<RwLock<State>>,
+    data_file_path: &Path,
+    nodes: &[SocketAddr],
+    node_index: usize,
+    original_value: &str,
+) -> Result<(), io::Error> {
+    // Retry until the protocol succeeds.
+    loop {
+        // Generate a new proposal number.
+        let proposal_number = {
+            // The `unwrap` is safe since it can only fail if a panic already happened.
+            let mut guard = state.write().await;
+            let proposal_number = generate_proposal_number(nodes, node_index, &mut guard);
+            crate::state::write(&guard, data_file_path).await?;
+            proposal_number
+        };
+
+        // Create an HTTP client.
+        let client = Client::new();
+
+        // Send a prepare message to all the nodes.
+        info!(
+            "Preparing value `{}` with proposal number:\n{}",
+            original_value,
+            // Serialization is safe.
+            serde_yaml::to_string(&proposal_number).unwrap(),
+        );
+        let prepare_responses = broadcast_quorum::<PrepareResponse>(
+            &client,
+            nodes,
+            PREPARE_ENDPOINT,
+            &PrepareRequest { proposal_number },
+        )
+        .await;
+
+        // Determine which value to propose.
+        let new_value = if let Some(accepted_proposal) = prepare_responses
+            .iter()
+            .filter_map(|response| response.accepted_proposal.clone())
+            .max_by_key(|accepted_proposal| accepted_proposal.0)
+        {
+            // There was an accepted proposal. Use that.
+            info!(
+                "Discovered existing value from cluster: {}",
+                accepted_proposal.1,
+            );
+            accepted_proposal.1
+        } else {
+            // Propose the given value.
+            info!("Quorum replied with no existing value.");
+            original_value.to_owned()
+        };
+
+        // Send an accept message to all the nodes.
+        info!(
+            "Requesting acceptance of value `{}` with proposal number:\n{}",
+            new_value,
+            // The `unwrap` is safe because serialization should never fail.
+            serde_yaml::to_string(&proposal_number).unwrap(),
+        );
+        let accept_responses = broadcast_quorum::<AcceptResponse>(
+            &client,
+            nodes,
+            ACCEPT_ENDPOINT,
+            &AcceptRequest {
+                proposal: (proposal_number, new_value.clone()),
+            },
+        )
+        .await;
+
+        // Determine if the proposed value was chosen.
+        let mut value_chosen = true;
+        for response in accept_responses {
+            if response.min_proposal_number > proposal_number {
+                value_chosen = false;
+            }
+
+            // Update the `next_round`, if applicable. The `unwrap` is safe
+            // since it can only fail if a panic already happened.
+            let mut guard = state.write().await;
+            if guard.next_round <= response.min_proposal_number.round {
+                guard.next_round = response.min_proposal_number.round + 1;
+                crate::state::write(&guard, data_file_path).await?;
+            }
+        }
+        if value_chosen {
+            // The protocol succeeded. Notify all the nodes and return.
+            info!("Consensus achieved. Notifying all the nodes.");
+            broadcast_all::<ChooseResponse>(
+                &client,
+                nodes,
+                CHOOSE_ENDPOINT,
+                &ChooseRequest { value: new_value },
+            )
+            .await;
+            info!("All nodes notified.");
+            return Ok(());
+        }
+
+        // The protocol failed. Sleep for a random duration before starting over.
+        info!("Failed to reach consensus. Starting over.");
+        sleep(thread_rng().gen_range(RESTART_DELAY_MIN..RESTART_DELAY_MAX)).await;
+    }
+}
+
 // Generate a new proposal number.
 fn generate_proposal_number(
     nodes: &[SocketAddr],
@@ -122,107 +229,6 @@ async fn broadcast_all<T: DeserializeOwned>(
         .collect::<FuturesUnordered<_>>()
         .collect()
         .await
-}
-
-// Propose a value to the cluster.
-pub async fn propose(
-    state: Arc<RwLock<State>>,
-    data_file_path: &Path,
-    nodes: &[SocketAddr],
-    node_index: usize,
-    original_value: &str,
-) -> Result<(), io::Error> {
-    // Retry until the protocol succeeds.
-    loop {
-        // Generate a new proposal number.
-        let proposal_number = {
-            // The `unwrap` is safe since it can only fail if a panic already happened.
-            let mut guard = state.write().await;
-            generate_proposal_number(nodes, node_index, &mut guard)
-        };
-
-        // Persist the state.
-        {
-            // The `unwrap` is safe since it can only fail if a panic already happened.
-            let guard = state.read().await;
-            crate::state::write(&guard, data_file_path).await?;
-        }
-
-        // Create an HTTP client.
-        let client = Client::new();
-
-        // Send a prepare message to all the nodes.
-        info!(
-            "Preparing value `{}` with proposal number:\n{}",
-            original_value,
-            // Serialization is safe.
-            serde_yaml::to_string(&proposal_number).unwrap(),
-        );
-        let prepare_responses = broadcast_quorum::<PrepareResponse>(
-            &client,
-            nodes,
-            PREPARE_ENDPOINT,
-            &PrepareRequest { proposal_number },
-        )
-        .await;
-
-        // Determine which value to propose.
-        let new_value = if let Some(accepted_proposal) = prepare_responses
-            .iter()
-            .filter_map(|response| response.accepted_proposal.clone())
-            .max_by_key(|accepted_proposal| accepted_proposal.0)
-        {
-            // There was an accepted proposal. Use that.
-            info!(
-                "Discovered existing value from cluster: {}",
-                accepted_proposal.1,
-            );
-            accepted_proposal.1
-        } else {
-            // Propose the given value.
-            info!("Quorum replied with no existing value.");
-            original_value.to_owned()
-        };
-
-        // Send an accept message to all the nodes.
-        info!(
-            "Requesting acceptance of value `{}` with proposal number:\n{}",
-            new_value,
-            // The `unwrap` is safe because serialization should never fail.
-            serde_yaml::to_string(&proposal_number).unwrap(),
-        );
-        let accept_responses = broadcast_quorum::<AcceptResponse>(
-            &client,
-            nodes,
-            ACCEPT_ENDPOINT,
-            &AcceptRequest {
-                proposal: (proposal_number, new_value.clone()),
-            },
-        )
-        .await;
-
-        // Was the proposed value chosen?
-        if accept_responses
-            .iter()
-            .all(|response| response.min_proposal_number == proposal_number)
-        {
-            // The protocol succeeded. Notify all the nodes and return.
-            info!("Consensus achieved. Notifying all the nodes.");
-            broadcast_all::<ChooseResponse>(
-                &client,
-                nodes,
-                CHOOSE_ENDPOINT,
-                &ChooseRequest { value: new_value },
-            )
-            .await;
-            info!("All nodes notified.");
-            return Ok(());
-        }
-
-        // The protocol failed. Sleep for a random duration before starting over.
-        info!("Failed to reach consensus. Starting over.");
-        sleep(thread_rng().gen_range(RESTART_DELAY_MIN..RESTART_DELAY_MAX)).await;
-    }
 }
 
 #[cfg(test)]

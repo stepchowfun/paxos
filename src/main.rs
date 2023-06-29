@@ -55,7 +55,6 @@ struct Settings {
 
 // Set up the logger.
 fn set_up_logging() {
-    // Set up the logger.
     Builder::new()
         .filter_module(
             module_path!(),
