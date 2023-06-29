@@ -9,7 +9,7 @@ use {
     serde::{Deserialize, Serialize},
     std::{
         convert::Infallible,
-        io,
+        io::{self, Write},
         net::SocketAddr,
         path::{Path, PathBuf},
         sync::Arc,
@@ -42,7 +42,7 @@ pub struct PrepareResponse {
 // Logic for the "prepare" endpoint
 fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
     info!(
-        "Received prepare message:\n{}",
+        "Received prepare request:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
     );
 
@@ -79,7 +79,7 @@ pub struct AcceptResponse {
 // Logic for the "accept" endpoint
 fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
     info!(
-        "Received accept message:\n{}",
+        "Received accept request:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
     );
     if state
@@ -113,9 +113,10 @@ pub struct ChooseResponse;
 
 // Logic for the "choose" endpoint
 fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
-    info!("Consensus achieved.");
+    info!("Received notification that consensus was achieved.");
     if state.chosen_value.is_none() {
         println!("{}", request.value);
+        io::stdout().flush().unwrap_or(());
         state.chosen_value = Some(request.value.clone());
     }
     ChooseResponse {}
