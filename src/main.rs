@@ -4,7 +4,6 @@ mod acceptor;
 mod config;
 mod proposer;
 mod state;
-mod util;
 
 #[macro_use]
 extern crate log;
@@ -12,39 +11,24 @@ extern crate log;
 use {
     clap::{App, AppSettings, Arg},
     env_logger::{fmt::Color, Builder},
-    futures::{future::ok, stream::Stream},
-    hyper::{
-        header::CONTENT_TYPE, service::service_fn, Body, Client, Method, Request, Response, Server,
-        StatusCode,
-    },
     log::{Level, LevelFilter},
     proposer::propose,
-    state::{initial, State},
+    state::initial,
     std::{
         env,
-        error::Error,
-        fs,
-        io::Write,
-        net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+        io::{self, Write},
+        net::SocketAddr,
         path::{Path, PathBuf},
         process::exit,
         str::FromStr,
         string::ToString,
-        sync::{Arc, RwLock},
-        time::Duration,
+        sync::Arc,
     },
-    textwrap::Wrapper,
-    tokio::prelude::{Future, FutureExt},
+    tokio::{sync::RwLock, try_join},
 };
 
 // The program version
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-// We embed the favicon directly into the compiled binary.
-const FAVICON_DATA: &[u8] = include_bytes!("../resources/favicon.ico");
-
-// The maximum amount of time the server will wait for the body of a request
-const BODY_TIMEOUT: Duration = Duration::from_secs(1);
 
 // Defaults
 const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
@@ -62,17 +46,59 @@ const PROPOSE_OPTION: &str = "propose";
 // This struct represents a summary of the command-line options
 #[derive(Clone)]
 struct Settings {
-    nodes: Vec<SocketAddrV4>,
+    nodes: Vec<SocketAddr>,
     node_index: usize,
-    ip: Ipv4Addr,
-    port: u16,
+    address: SocketAddr,
     proposal: Option<String>,
     data_file_path: PathBuf,
 }
 
+// Set up the logger.
+fn set_up_logging() {
+    // Set up the logger.
+    Builder::new()
+        .filter_module(
+            module_path!(),
+            LevelFilter::from_str(
+                &env::var("LOG_LEVEL").unwrap_or_else(|_| DEFAULT_LOG_LEVEL.to_string()),
+            )
+            .unwrap_or(DEFAULT_LOG_LEVEL),
+        )
+        .format(|buf, record| {
+            let mut style = buf.style();
+            style.set_bold(true);
+            match record.level() {
+                Level::Error => {
+                    style.set_color(Color::Red);
+                }
+                Level::Warn => {
+                    style.set_color(Color::Yellow);
+                }
+                Level::Info => {
+                    style.set_color(Color::Green);
+                }
+                Level::Debug | Level::Trace => {
+                    style.set_color(Color::Blue);
+                }
+            }
+            let indent_size = record.level().to_string().len() + 3;
+            let indent = &" ".repeat(indent_size);
+            let options = textwrap::Options::with_termwidth()
+                .initial_indent(indent)
+                .subsequent_indent(indent);
+            writeln!(
+                buf,
+                "{} {}",
+                style.value(format!("[{}]", record.level())),
+                &textwrap::fill(&record.args().to_string(), &options)[indent_size..],
+            )
+        })
+        .init();
+}
+
 // Parse the command-line options.
 #[allow(clippy::too_many_lines)]
-fn settings() -> Settings {
+async fn settings() -> io::Result<Settings> {
     // Set up the command-line interface.
     let matches = App::new("Paxos")
         .version(VERSION)
@@ -143,51 +169,57 @@ fn settings() -> Settings {
         .unwrap_or(CONFIG_FILE_DEFAULT_PATH);
 
     // Parse the config file.
-    let config_data = fs::read_to_string(config_file_path).unwrap_or_else(|e| {
-        error!("Unable to read file `{}`. Reason: {}", config_file_path, e);
-        exit(1);
-    });
-    let config = config::parse(&config_data).unwrap_or_else(|e| {
-        error!(
-            "Unable to parse file `{}`. Reason: {}.",
-            config_file_path,
-            e,
-        );
-        exit(1);
-    });
+    let config = config::read(Path::new(config_file_path)).await?;
 
     // Parse the node index. The unwrap is safe due to [ref:node_required].
     let node_repr = matches.value_of(NODE_OPTION).unwrap();
-    let node_index: usize = node_repr.parse().unwrap_or_else(|e| {
-        error!("`{}` is not a valid node index. Reason: {}", node_repr, e);
-        exit(1);
-    });
+    let node_index: usize = node_repr.parse().map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "`{}` is not a valid node index. Reason: {}",
+                node_repr,
+                error,
+            ),
+        )
+    })?;
     if node_index >= config.nodes.len() {
-        error!("There is no node with index {}.", node_repr);
-        exit(1); // [tag:node_index_valid]
+        // [tag:node_index_valid]
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("There is no node with index {}.", node_repr),
+        ));
     }
 
     // Parse the IP address, if given.
     let ip = matches.value_of(IP_OPTION).map_or_else(
-        || *config.nodes[node_index].ip(), // [ref:node_index_valid]
-        |x| {
-            x.parse().unwrap_or_else(|e| {
-                error!("`{}` is not a valid IP address. Reason: {}", x, e);
-                exit(1);
+        || Ok(config.nodes[node_index].ip()), // [ref:node_index_valid]
+        |raw_ip| {
+            raw_ip.parse().map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("`{}` is not a valid IP address. Reason: {}", raw_ip, error),
+                )
             })
         },
-    );
+    )?;
 
     // Parse the port number, if given.
     let port = matches.value_of(PORT_OPTION).map_or_else(
-        || config.nodes[node_index].port(), // [ref:node_index_valid]
-        |x| {
-            x.parse().unwrap_or_else(|e| {
-                error!("`{}` is not a valid port number. Reason: {}", x, e);
-                exit(1);
+        || Ok(config.nodes[node_index].port()), // [ref:node_index_valid]
+        |raw_port| {
+            raw_port.parse().map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "`{}` is not a valid port number. Reason: {}",
+                        raw_port,
+                        error,
+                    ),
+                )
             })
         },
-    );
+    )?;
 
     // Parse the data directory path.
     let data_dir_path = Path::new(
@@ -200,217 +232,73 @@ fn settings() -> Settings {
     let data_file_path = Path::join(data_dir_path, format!("{}:{}", ip, port));
 
     // Return the settings.
-    Settings {
+    Ok(Settings {
         nodes: config.nodes,
         node_index,
-        ip,
-        port,
+        address: SocketAddr::new(ip, port),
         proposal: matches.value_of(PROPOSE_OPTION).map(ToString::to_string),
         data_file_path,
-    }
-}
-
-// Run the program.
-#[allow(clippy::too_many_lines)]
-fn run(settings: Settings) -> impl Future<Item = (), Error = ()> {
-    // Initialize the program state.
-    let state = Arc::new(RwLock::new(initial()));
-
-    // Attempt to read the persisted state.
-    state::read(state.clone(), &settings.data_file_path).then(move |read_result| {
-        // Inform the user whether the read succeeded.
-        if read_result.is_ok() {
-            info!("State loaded from persistent storage.");
-        } else {
-            info!("Starting from the initial state.");
-        }
-
-        // Clone some data that will outlive this function.
-        let state_for_acceptor = state.clone();
-        let state_for_proposer = state_for_acceptor.clone();
-        let settings_for_acceptor = settings.clone();
-
-        // Set up the HTTP server.
-        let address = SocketAddr::V4(SocketAddrV4::new(settings.ip, settings.port));
-        let server = Server::try_bind(&address)
-            .unwrap_or_else(|e| {
-                error!("Unable to bind to address `{}`. Reason: {}", address, e);
-                exit(1);
-            })
-            .serve(move || {
-                let state = state_for_acceptor.clone();
-                let settings = settings_for_acceptor.clone();
-                service_fn(
-                    move |req: Request<Body>| -> Box<
-                        dyn Future<Item = Response<Body>, Error = Box<dyn Error + Send + Sync>>
-                            + Send,
-                    > {
-                        let state_for_request = state.clone();
-                        let state_for_write = state.clone();
-                        let settings = settings.clone();
-
-                        // This macro eliminates some boilerplate in the match expression below. If
-                        // Rust had higher-ranked types or let polymorphism, this could have been
-                        // implemented as a function.
-                        macro_rules! rpc {
-                            ($x:ident) => {
-                                Box::new(
-                                    req.into_body().concat2().timeout(BODY_TIMEOUT).map(
-                                        move |chunk| {
-                                            let state = state_for_request.clone();
-                                            let body = chunk.iter().cloned().collect::<Vec<u8>>();
-
-                                            // The `unwrap` is safe under non-Byzantine conditions
-                                            let payload = bincode::deserialize(&body).unwrap();
-
-                                            // The `unwrap` is safe since it can only fail if a
-                                            // panic already happened.
-                                            let mut state_borrow = state.write().unwrap();
-
-                                            acceptor::$x(&payload, &mut state_borrow)
-                                        },
-                                    ).map_err(|e|
-                                        Box::new(e) as Box<dyn Error + Send + Sync>
-                                    ).and_then(move |response| {
-                                        let state = state_for_write.clone();
-                                        let settings = settings.clone();
-
-                                        // The `unwrap` is safe since it can only fail if a panic
-                                        // already happened.
-                                        let state_borrow = state.read().unwrap();
-
-                                        state::write(&state_borrow, &settings.data_file_path)
-                                            .map(|_| response)
-                                            .map_err(|e|
-                                                Box::new(e) as Box<dyn Error + Send + Sync>
-                                            )
-                                    }).map(|response|
-                                        Response::new(Body::from(
-                                            // The `unwrap` is safe because serialization should
-                                            // never fail.
-                                            bincode::serialize(&response).unwrap(),
-                                        )),
-                                    ),
-                                  )
-                              };
-                          }
-
-                        // Match on the route and handle the request appropriately.
-                        match (req.method(), req.uri().path()) {
-                            // RPC calls
-                            (&Method::POST, acceptor::PREPARE_ENDPOINT) => rpc![prepare],
-                            (&Method::POST, acceptor::ACCEPT_ENDPOINT) => rpc![accept],
-                            (&Method::POST, acceptor::CHOOSE_ENDPOINT) => rpc![choose],
-
-                            // Summary of the program state
-                            (&Method::GET, "/") => {
-                                // Respond with a representation of the program state.
-                                let state_repr = {
-                                    // The `unwrap` is safe since it can only fail if a panic
-                                    // already happened.
-
-                                    let state_borrow: &State = &state.read().unwrap();
-                                    // The `unwrap` is safe because serialization should never fail.
-                                    serde_yaml::to_string(state_borrow).unwrap()
-                                };
-                                Box::new(ok(Response::new(Body::from(format!(
-                                    "System operational.\n\n{}",
-                                    state_repr,
-                                )))))
-                            }
-
-                            // Favicon
-                            (&Method::GET, "/favicon.ico") => {
-                                // Respond with the favicon.
-                                Box::new(ok(Response::builder()
-                                    .header(CONTENT_TYPE, "image/x-icon")
-                                    .body(Body::from(FAVICON_DATA))
-                                    // The `unwrap` is safe since we constructed a well-formed
-                                    // response.
-                                    .unwrap()))
-                            }
-
-                            // Catch-all
-                            _ => {
-                                // Respond with a generic 404 page.
-                                Box::new(ok(Response::builder()
-                                    .status(StatusCode::NOT_FOUND)
-                                    .body(Body::from("Not found."))
-                                    // The `unwrap` is safe since we constructed a well-formed
-                                    // response.
-                                    .unwrap()))
-                            }
-                        }
-                    },
-                )
-            })
-            .map_err(|e| error!("Server error: {}", e));
-
-        // Propose a value if applicable.
-        let client = settings.proposal.as_ref().map_or_else(
-            || Box::new(ok(())) as Box<dyn Future<Item = (), Error = ()> + Send>,
-            |value| {
-                Box::new(propose(
-                    &Client::new(),
-                    &settings.nodes,
-                    settings.node_index,
-                    state_for_proposer,
-                    &settings.data_file_path,
-                    value,
-                )) as Box<dyn Future<Item = (), Error = ()> + Send>
-            },
-        );
-
-        // Tell the user the address of the server.
-        info!("Listening on http://{}", address);
-
-        // Run the server and the client.
-        server.join(client).map(|_| ())
     })
 }
 
 // Let the fun begin!
-fn main() {
+#[tokio::main]
+async fn main() {
     // Set up the logger.
-    Builder::new()
-        .filter_module(
-            module_path!(),
-            LevelFilter::from_str(
-                &env::var("LOG_LEVEL").unwrap_or_else(|_| DEFAULT_LOG_LEVEL.to_string()),
-            )
-            .unwrap_or(DEFAULT_LOG_LEVEL),
-        )
-        .format(|buf, record| {
-            let mut style = buf.style();
-            style.set_bold(true);
-            match record.level() {
-                Level::Error => {
-                    style.set_color(Color::Red);
-                }
-                Level::Warn => {
-                    style.set_color(Color::Yellow);
-                }
-                Level::Info => {
-                    style.set_color(Color::Green);
-                }
-                Level::Debug | Level::Trace => {
-                    style.set_color(Color::Blue);
-                }
-            }
-            let indent_size = record.level().to_string().len() + 3;
-            let indent = &" ".repeat(indent_size);
-            writeln!(
-                buf,
-                "{} {}",
-                style.value(format!("[{}]", record.level())),
-                &Wrapper::with_termwidth()
-                    .initial_indent(indent)
-                    .subsequent_indent(indent)
-                    .fill(&record.args().to_string())[indent_size..],
-            )
-        })
-        .init();
+    set_up_logging();
 
-    // Run the program!
-    tokio::run(run(settings()));
+    // Parse the command-line arguments.
+    let settings = match settings().await {
+        Ok(settings) => settings,
+        Err(error) => {
+            error!("{}", error);
+            exit(1);
+        }
+    };
+
+    // Initialize the program state.
+    let state = Arc::new(RwLock::new(initial()));
+
+    // Attempt to read any persisted state.
+    match state::read(&settings.data_file_path).await {
+        Ok(persisted_state) => {
+            let mut guard = state.write().await;
+            *guard = persisted_state;
+            info!("State loaded from persistent storage.");
+        }
+        Err(error) => {
+            if error.kind() == io::ErrorKind::NotFound {
+                info!("Starting from the initial state.");
+            } else {
+                error!(
+                    "Unable to load state file `{}`. Reason: {}",
+                    settings.data_file_path.to_string_lossy(),
+                    error,
+                );
+                exit(1);
+            }
+        }
+    }
+
+    // Run the acceptor and the proposer, if applicable.
+    if let Err(error) = try_join!(
+        acceptor::acceptor(state.clone(), &settings.data_file_path, settings.address),
+        async {
+            if let Some(value) = &settings.proposal {
+                propose(
+                    state,
+                    &settings.data_file_path,
+                    &settings.nodes,
+                    settings.node_index,
+                    value,
+                )
+                .await
+            } else {
+                Ok(())
+            }
+        },
+    ) {
+        error!("{}", error);
+        exit(1);
+    }
 }

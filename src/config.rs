@@ -1,25 +1,41 @@
 use {
     serde::{Deserialize, Serialize},
-    std::net::SocketAddrV4,
+    std::{io, net::SocketAddr, path::Path},
+    tokio::{fs::File, io::AsyncReadExt},
 };
 
 // A program configuration
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    pub nodes: Vec<SocketAddrV4>,
+    pub nodes: Vec<SocketAddr>,
 }
 
-// Parse config data.
-pub fn parse(config: &str) -> Result<Config, String> {
-    serde_yaml::from_str(config).map_err(|e| format!("{}", e))
+// Read the config from a file.
+pub async fn read(path: &Path) -> io::Result<Config> {
+    // Read the file into a buffer.
+    let mut file = File::open(path).await?;
+    let mut contents = vec![];
+    file.read_to_end(&mut contents).await?;
+
+    // Deserialize the data.
+    serde_yaml::from_slice(&contents).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Error loading config file `{}`. Reason: {}",
+                path.to_string_lossy(),
+                error,
+            ),
+        )
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use {
-        crate::config::{parse, Config},
-        std::net::{Ipv4Addr, SocketAddrV4},
+        crate::config::Config,
+        std::net::{IpAddr, Ipv4Addr, SocketAddr},
     };
 
     #[test]
@@ -29,9 +45,9 @@ nodes: []
     "#
         .trim();
 
-        let result = Ok(Config { nodes: vec![] });
+        let result = Config { nodes: vec![] };
 
-        assert_eq!(parse(config), result);
+        assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
     }
 
     #[test]
@@ -42,11 +58,14 @@ nodes:
     "#
         .trim();
 
-        let result = Ok(Config {
-            nodes: vec![SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 3000)],
-        });
+        let result = Config {
+            nodes: vec![SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                3000,
+            )],
+        };
 
-        assert_eq!(parse(config), result);
+        assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
     }
 
     #[test]
@@ -59,14 +78,14 @@ nodes:
     "#
         .trim();
 
-        let result = Ok(Config {
+        let result = Config {
             nodes: vec![
-                SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 3000),
-                SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 2), 3001),
-                SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 3), 3002),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1)), 3000),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 2)), 3001),
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 3)), 3002),
             ],
-        });
+        };
 
-        assert_eq!(parse(config), result);
+        assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
     }
 }

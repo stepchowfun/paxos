@@ -1,48 +1,46 @@
 use {
     crate::state::{ProposalNumber, State},
+    hyper::{
+        header::CONTENT_TYPE,
+        server::conn::AddrStream,
+        service::{make_service_fn, service_fn},
+        Body, Method, Request, Response, Server, StatusCode,
+    },
     serde::{Deserialize, Serialize},
+    std::{
+        convert::Infallible,
+        io,
+        net::SocketAddr,
+        path::{Path, PathBuf},
+        sync::Arc,
+    },
+    tokio::sync::RwLock,
 };
+
+// We embed the favicon directly into the compiled binary.
+const FAVICON_DATA: &[u8] = include_bytes!("../resources/favicon.ico");
 
 // Endpoints
 pub const PREPARE_ENDPOINT: &str = "/prepare";
 pub const ACCEPT_ENDPOINT: &str = "/accept";
 pub const CHOOSE_ENDPOINT: &str = "/choose";
 
+// Request type for the "prepare" endpoint
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareRequest {
     pub proposal_number: ProposalNumber,
 }
 
+// Response type for the "prepare" endpoint
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareResponse {
     pub accepted_proposal: Option<(ProposalNumber, String)>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptRequest {
-    pub proposal: (ProposalNumber, String),
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AcceptResponse {
-    pub min_proposal_number: ProposalNumber,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChooseRequest {
-    pub value: String,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChooseResponse;
-
-pub fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
+// Logic for the "prepare" endpoint
+fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
     info!(
         "Received prepare message:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
@@ -64,7 +62,22 @@ pub fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
     }
 }
 
-pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
+// Request type for the "accept" endpoint
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptRequest {
+    pub proposal: (ProposalNumber, String),
+}
+
+// Response type for the "accept" endpoint
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptResponse {
+    pub min_proposal_number: ProposalNumber,
+}
+
+// Logic for the "accept" endpoint
+fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
     info!(
         "Received accept message:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
@@ -72,7 +85,9 @@ pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
     if state
         .min_proposal_number
         .as_ref()
-        .map_or(true, |x| request.proposal.0 >= *x)
+        .map_or(true, |proposal_number| {
+            request.proposal.0 >= *proposal_number
+        })
     {
         state.min_proposal_number = Some(request.proposal.0);
         state.accepted_proposal = Some(request.proposal.clone());
@@ -84,7 +99,20 @@ pub fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
     }
 }
 
-pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
+// Request type for the "choose" endpoint
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChooseRequest {
+    pub value: String,
+}
+
+// Response type for the "choose" endpoint
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChooseResponse;
+
+// Logic for the "choose" endpoint
+fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
     info!("Consensus achieved.");
     if state.chosen_value.is_none() {
         println!("{}", request.value);
@@ -93,11 +121,135 @@ pub fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
     ChooseResponse {}
 }
 
+// Context for each service instance
+#[derive(Clone)]
+struct Context {
+    state: Arc<RwLock<State>>,
+    data_file_path: PathBuf,
+}
+
+// Request handler
+async fn handle_request(
+    context: Context,
+    request: Request<Body>,
+) -> Result<Response<Body>, io::Error> {
+    // This macro eliminates some boilerplate in the match expression below.
+    macro_rules! rpc {
+        ($endpoint:ident) => {{
+            // Collect the body into a byte array.
+            let body = hyper::body::to_bytes(request.into_body())
+                .await
+                .map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Unable to read request body. Reason: {}", error),
+                    )
+                })?;
+
+            // Parse the body.
+            let payload = bincode::deserialize(&body).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Unable to parse request body. Reason: {}", error),
+                )
+            })?;
+
+            // Handle the request.
+            let mut guard = context.state.write().await;
+            let response = $endpoint(&payload, &mut guard);
+            crate::state::write(&guard, &context.data_file_path).await?;
+
+            // Serialize the response.
+            Ok(Response::new(Body::from(
+                bincode::serialize(&response).map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Unable to serialize response. Reason: {}", error),
+                    )
+                })?,
+            )))
+        }};
+    }
+
+    // Match on the route and handle the request appropriately.
+    match (request.method(), request.uri().path()) {
+        // RPC calls
+        (&Method::POST, PREPARE_ENDPOINT) => rpc![prepare],
+        (&Method::POST, ACCEPT_ENDPOINT) => rpc![accept],
+        (&Method::POST, CHOOSE_ENDPOINT) => rpc![choose],
+
+        // Summary of the program state
+        (&Method::GET, "/") => {
+            // Respond with a representation of the program state. The `unwrap`
+            // is safe because serialization should never fail.
+            let state_repr = serde_yaml::to_string(&*context.state.read().await).unwrap();
+            Ok(Response::new(Body::from(format!(
+                "System operational.\n\n{}",
+                state_repr,
+            ))))
+        }
+
+        // Favicon
+        (&Method::GET, "/favicon.ico") => {
+            // Respond with the favicon.
+            Ok(Response::builder()
+                .header(CONTENT_TYPE, "image/x-icon")
+                .body(Body::from(FAVICON_DATA))
+                // The `unwrap` is safe since we constructed a well-formed
+                // response.
+                .unwrap())
+        }
+
+        // Catch-all
+        _ => {
+            // Respond with a generic 404 page.
+            Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("Not found."))
+                // The `unwrap` is safe since we constructed a well-formed
+                // response.
+                .unwrap())
+        }
+    }
+}
+
+// Entrypoint for the acceptor
+pub async fn acceptor(
+    state: Arc<RwLock<State>>,
+    data_file_path: &Path,
+    address: SocketAddr,
+) -> Result<(), io::Error> {
+    // Set up the HTTP server for the acceptor.
+    let context = Context {
+        state,
+        data_file_path: data_file_path.to_owned(),
+    };
+    let server = Server::bind(&address).serve(make_service_fn(move |_connection: &AddrStream| {
+        let context = context.clone();
+        let service = service_fn(move |request| handle_request(context.clone(), request));
+        async move { Ok::<_, Infallible>(service) }
+    }));
+
+    // Tell the user the address of the server.
+    info!("Listening on http://{}/", address);
+
+    // Wait on the server.
+    server.await.map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Server failed. Reason: {}", error),
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{
-        acceptor::{accept, choose, prepare, AcceptRequest, ChooseRequest, PrepareRequest},
-        state::{initial, ProposalNumber},
+    use {
+        crate::{
+            acceptor::{accept, choose, prepare, AcceptRequest, ChooseRequest, PrepareRequest},
+            state::{initial, ProposalNumber},
+        },
+        std::net::{IpAddr, Ipv4Addr, SocketAddr},
     };
 
     #[test]
@@ -106,8 +258,7 @@ mod tests {
         let request = PrepareRequest {
             proposal_number: ProposalNumber {
                 round: 0,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
         };
         let response = prepare(&request, &mut state);
@@ -120,14 +271,12 @@ mod tests {
         let mut state = initial();
         state.min_proposal_number = Some(ProposalNumber {
             round: 0,
-            proposer_ip: 0,
-            proposer_port: 0,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         });
         let request = PrepareRequest {
             proposal_number: ProposalNumber {
                 round: 1,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
         };
         let response = prepare(&request, &mut state);
@@ -140,14 +289,12 @@ mod tests {
         let mut state = initial();
         state.min_proposal_number = Some(ProposalNumber {
             round: 1,
-            proposer_ip: 0,
-            proposer_port: 0,
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         });
         let request = PrepareRequest {
             proposal_number: ProposalNumber {
                 round: 0,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
         };
         let response = prepare(&request, &mut state);
@@ -161,8 +308,7 @@ mod tests {
         let accepted_proposal = (
             ProposalNumber {
                 round: 0,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
             "foo".to_string(),
         );
@@ -171,8 +317,7 @@ mod tests {
         let request = PrepareRequest {
             proposal_number: ProposalNumber {
                 round: 1,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
         };
         let response = prepare(&request, &mut state);
@@ -185,8 +330,7 @@ mod tests {
         let proposal = (
             ProposalNumber {
                 round: 0,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
             "foo".to_string(),
         );
@@ -212,8 +356,7 @@ mod tests {
         let proposal0 = (
             ProposalNumber {
                 round: 0,
-                proposer_ip: 0,
-                proposer_port: 0,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
             },
             "foo".to_string(),
         );
@@ -221,8 +364,7 @@ mod tests {
         let proposal1 = (
             ProposalNumber {
                 round: 1,
-                proposer_ip: 1,
-                proposer_port: 1,
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081),
             },
             "bar".to_string(),
         );
