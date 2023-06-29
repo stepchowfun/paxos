@@ -238,9 +238,3 @@ jobs:
           --attach 'artifacts/paxos-aarch64-pc-windows-msvc.exe' \
           "v$VERSION"
         echo "Created release v$VERSION."
-    - uses: stepchowfun/toast/.github/actions/toast@main
-      with:
-        tasks: publish
-        docker_repo: stephanmisc/toast
-      env:
-        CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
