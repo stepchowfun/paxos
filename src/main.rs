@@ -3,6 +3,7 @@
 mod acceptor;
 mod config;
 mod proposer;
+mod rpc;
 mod state;
 
 #[macro_use]
@@ -228,7 +229,7 @@ async fn settings() -> io::Result<Settings> {
     );
 
     // Determine the data file path [tag:data_file_path_has_parent].
-    let data_file_path = Path::join(data_dir_path, format!("{}:{}", ip, port));
+    let data_file_path = Path::join(data_dir_path, format!("{}-{}", ip, port));
 
     // Return the settings.
     Ok(Settings {
@@ -279,22 +280,26 @@ async fn main() {
         }
     }
 
-    // Run the acceptor and the proposer, if applicable.
+    // Run the acceptor and the proposer, if applicable. Also, broadcasr any chosen value from the
+    // persisted state.
     if let Err(error) = try_join!(
         acceptor::acceptor(state.clone(), &settings.data_file_path, settings.address),
         async {
-            if let Some(value) = &settings.proposal {
-                propose(
-                    state,
-                    &settings.data_file_path,
-                    &settings.nodes,
-                    settings.node_index,
-                    value,
-                )
-                .await
-            } else {
-                Ok(())
+            // If there's a value to propose and no chosen value in the persisted state, propose the
+            // value.
+            if state.read().await.chosen_value.is_none() {
+                if let Some(value) = &settings.proposal {
+                    propose(
+                        state.clone(),
+                        &settings.data_file_path,
+                        &settings.nodes,
+                        settings.node_index,
+                        value,
+                    )
+                    .await?;
+                }
             }
+            Ok(())
         },
     ) {
         error!("{}", error);

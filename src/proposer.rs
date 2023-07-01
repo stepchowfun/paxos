@@ -4,22 +4,32 @@ use {
             AcceptRequest, AcceptResponse, ChooseRequest, ChooseResponse, PrepareRequest,
             PrepareResponse, ACCEPT_ENDPOINT, CHOOSE_ENDPOINT, PREPARE_ENDPOINT,
         },
+        rpc::{broadcast_all, broadcast_quorum},
         state::{ProposalNumber, State},
     },
-    futures::{stream::FuturesUnordered, StreamExt},
-    hyper::{client::HttpConnector, Body, Client, Method, Request},
+    hyper::Client,
     rand::{thread_rng, Rng},
-    serde::{de::DeserializeOwned, Serialize},
-    std::{cmp::min, io, net::SocketAddr, path::Path, sync::Arc, time::Duration},
+    std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration},
     tokio::{sync::RwLock, time::sleep},
 };
 
 // Duration constants
-const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(100);
-const EXPONENTIAL_BACKOFF_MAX: Duration = Duration::from_secs(2);
-const EXPONENTIAL_BACKOFF_MULTIPLIER: u32 = 2;
 const RESTART_DELAY_MIN: Duration = Duration::from_millis(0);
 const RESTART_DELAY_MAX: Duration = Duration::from_millis(100);
+
+// Generate a new proposal number.
+fn generate_proposal_number(
+    nodes: &[SocketAddr],
+    node_index: usize,
+    state: &mut State,
+) -> ProposalNumber {
+    let proposal_number = ProposalNumber {
+        round: state.next_round,
+        proposer_address: nodes[node_index],
+    };
+    state.next_round += 1;
+    proposal_number
+}
 
 // Propose a value to the cluster.
 pub async fn propose(
@@ -31,6 +41,9 @@ pub async fn propose(
 ) -> Result<(), io::Error> {
     // Retry until the protocol succeeds.
     loop {
+        // Create an HTTP client.
+        let client = Client::new();
+
         // Generate a new proposal number.
         let proposal_number = {
             // The `unwrap` is safe since it can only fail if a panic already happened.
@@ -40,11 +53,8 @@ pub async fn propose(
             proposal_number
         };
 
-        // Create an HTTP client.
-        let client = Client::new();
-
         // Send a prepare message to all the nodes.
-        info!(
+        debug!(
             "Preparing value `{}` with proposal number:\n{}",
             original_value,
             // Serialization is safe.
@@ -65,19 +75,19 @@ pub async fn propose(
             .max_by_key(|accepted_proposal| accepted_proposal.0)
         {
             // There was an accepted proposal. Use that.
-            info!(
+            debug!(
                 "Discovered existing value from cluster: {}",
                 accepted_proposal.1,
             );
             accepted_proposal.1
         } else {
             // Propose the given value.
-            info!("Quorum replied with no existing value.");
+            debug!("Quorum replied with no existing value.");
             original_value.to_owned()
         };
 
         // Send an accept message to all the nodes.
-        info!(
+        debug!(
             "Requesting acceptance of value `{}` with proposal number:\n{}",
             new_value,
             // The `unwrap` is safe because serialization should never fail.
@@ -110,7 +120,7 @@ pub async fn propose(
         }
         if value_chosen {
             // The protocol succeeded. Notify all the nodes and return.
-            info!("Consensus achieved. Notifying all the nodes.");
+            debug!("Consensus achieved. Notifying all the nodes.");
             broadcast_all::<ChooseResponse>(
                 &client,
                 nodes,
@@ -118,117 +128,14 @@ pub async fn propose(
                 &ChooseRequest { value: new_value },
             )
             .await;
-            info!("All nodes notified.");
+            info!("Proposer finished.");
             return Ok(());
         }
 
         // The protocol failed. Sleep for a random duration before starting over.
-        info!("Failed to reach consensus. Starting over.");
+        debug!("Failed to reach consensus. Starting over.");
         sleep(thread_rng().gen_range(RESTART_DELAY_MIN..RESTART_DELAY_MAX)).await;
     }
-}
-
-// Generate a new proposal number.
-fn generate_proposal_number(
-    nodes: &[SocketAddr],
-    node_index: usize,
-    state: &mut State,
-) -> ProposalNumber {
-    let proposal_number = ProposalNumber {
-        round: state.next_round,
-        proposer_address: nodes[node_index],
-    };
-    state.next_round += 1;
-    proposal_number
-}
-
-// Send a request without retries.
-async fn try_to_send<T: DeserializeOwned>(
-    client: &Client<HttpConnector, Body>,
-    node: SocketAddr,
-    endpoint: &str,
-    payload: &impl Serialize,
-) -> Result<T, hyper::Error> {
-    Ok(bincode::deserialize(
-        &hyper::body::to_bytes(
-            client
-                .request(
-                    Request::builder()
-                        .method(Method::POST)
-                        .uri(format!("http://{}{}", node, endpoint))
-                        // The `unwrap` is safe because serialization should never fail.
-                        .body(Body::from(bincode::serialize(&payload).unwrap()))
-                        .unwrap(), // Safe since we constructed a well-formed request
-                )
-                .await?
-                .into_body(),
-        )
-        .await?,
-    )
-    .unwrap()) // Safe under non-Byzantine conditions
-}
-
-// Send a request, retrying with exponential backoff until it succeeds.
-async fn send<T: DeserializeOwned>(
-    client: &Client<HttpConnector, Body>,
-    node: SocketAddr,
-    endpoint: &str,
-    payload: &impl Serialize,
-) -> T {
-    // The delay between requests
-    let mut delay = EXPONENTIAL_BACKOFF_MIN;
-
-    // Retry until the request succeeds.
-    loop {
-        // Send the request.
-        match try_to_send(client, node, endpoint, payload).await {
-            Ok(response) => {
-                return response;
-            }
-            Err(error) => {
-                // Log the error.
-                error!("Received error: {}", error);
-            }
-        }
-
-        // Sleep before retrying.
-        sleep(delay).await;
-        delay = min(
-            delay * EXPONENTIAL_BACKOFF_MULTIPLIER,
-            EXPONENTIAL_BACKOFF_MAX,
-        );
-    }
-}
-
-// Send a request to all nodes. Return once a majority of responses come in.
-async fn broadcast_quorum<T: DeserializeOwned>(
-    client: &Client<HttpConnector, Body>,
-    nodes: &[SocketAddr],
-    endpoint: &str,
-    payload: &impl Serialize,
-) -> Vec<T> {
-    nodes
-        .iter()
-        .map(|node| send(client, *node, endpoint, payload))
-        .collect::<FuturesUnordered<_>>()
-        .take(nodes.len() / 2 + 1)
-        .collect()
-        .await
-}
-
-// Send a request to all nodes. Return once all responses come in.
-async fn broadcast_all<T: DeserializeOwned>(
-    client: &Client<HttpConnector, Body>,
-    nodes: &[SocketAddr],
-    endpoint: &str,
-    payload: &impl Serialize,
-) -> Vec<T> {
-    nodes
-        .iter()
-        .map(|node| send(client, *node, endpoint, payload))
-        .collect::<FuturesUnordered<_>>()
-        .collect()
-        .await
 }
 
 #[cfg(test)]

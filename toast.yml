@@ -135,6 +135,7 @@ tasks:
       - .git
 
       # [tag:excluded_input_paths] Keep this in sync with [ref:gitignore].
+      - .data
       - artifacts
       - target
     command: |

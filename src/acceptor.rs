@@ -41,7 +41,7 @@ pub struct PrepareResponse {
 
 // Logic for the "prepare" endpoint
 fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
-    info!(
+    debug!(
         "Received prepare request:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
     );
@@ -78,7 +78,7 @@ pub struct AcceptResponse {
 
 // Logic for the "accept" endpoint
 fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
-    info!(
+    debug!(
         "Received accept request:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
     );
@@ -113,8 +113,8 @@ pub struct ChooseResponse;
 
 // Logic for the "choose" endpoint
 fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
-    info!("Received notification that consensus was achieved.");
     if state.chosen_value.is_none() {
+        info!("Consensus was achieved.");
         println!("{}", request.value);
         io::stdout().flush().unwrap_or(());
         state.chosen_value = Some(request.value.clone());
