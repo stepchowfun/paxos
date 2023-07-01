@@ -1,6 +1,6 @@
 [package]
 name = "paxos"
-version = "1.0.7"
+version = "1.0.8"
 authors = ["Stephan Boyer <stephan@stephanboyer.com>"]
 edition = "2021"
 description = "An implementation of single-decree Paxos."

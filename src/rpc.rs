@@ -7,8 +7,8 @@ use {
 };
 
 // Duration constants
-const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(100);
-const EXPONENTIAL_BACKOFF_MAX: Duration = Duration::from_secs(2);
+const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(50);
+const EXPONENTIAL_BACKOFF_MAX: Duration = Duration::from_secs(1);
 const EXPONENTIAL_BACKOFF_MULTIPLIER: u32 = 2;
 
 // Send a request without retries.

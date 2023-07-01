@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2023-07-01
+
+### Changed
+- RPC retry delays have been reduced, and the sleep between Paxos rounds has been removed entirely.
+
 ## [1.0.7] - 2023-07-01
 
 ### Changed
