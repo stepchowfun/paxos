@@ -14,7 +14,7 @@
   DESTINATION="${PREFIX:-/usr/local/bin}/paxos"
 
   # Which version to download
-  RELEASE="v${VERSION:-1.0.7}"
+  RELEASE="v${VERSION:-1.0.8}"
 
   # Determine which binary to download.
   FILENAME=''
