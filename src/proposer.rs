@@ -4,8 +4,8 @@ use {
             AcceptRequest, AcceptResponse, ChooseRequest, ChooseResponse, PrepareRequest,
             PrepareResponse, ACCEPT_ENDPOINT, CHOOSE_ENDPOINT, PREPARE_ENDPOINT,
         },
-        rpc::{broadcast_all, broadcast_quorum},
-        state::{ProposalNumber, State},
+        rpc::{broadcast_quorum, try_to_broadcast},
+        state::{self, ProposalNumber},
     },
     hyper::Client,
     rand::{thread_rng, Rng},
@@ -21,7 +21,7 @@ const RESTART_DELAY_MAX: Duration = Duration::from_millis(100);
 fn generate_proposal_number(
     nodes: &[SocketAddr],
     node_index: usize,
-    state: &mut State,
+    state: &mut state::Durable,
 ) -> ProposalNumber {
     let proposal_number = ProposalNumber {
         round: state.next_round,
@@ -33,30 +33,29 @@ fn generate_proposal_number(
 
 // Propose a value to the cluster.
 pub async fn propose(
-    state: Arc<RwLock<State>>,
+    state: Arc<RwLock<(state::Durable, state::Volatile)>>,
     data_file_path: &Path,
     nodes: &[SocketAddr],
     node_index: usize,
-    original_value: &str,
+    original_value: Option<&str>,
 ) -> Result<(), io::Error> {
+    // Create an HTTP client.
+    let client = Client::new();
+
     // Retry until the protocol succeeds.
     loop {
-        // Create an HTTP client.
-        let client = Client::new();
-
         // Generate a new proposal number.
         let proposal_number = {
             // The `unwrap` is safe since it can only fail if a panic already happened.
             let mut guard = state.write().await;
-            let proposal_number = generate_proposal_number(nodes, node_index, &mut guard);
-            crate::state::write(&guard, data_file_path).await?;
+            let proposal_number = generate_proposal_number(nodes, node_index, &mut guard.0);
+            crate::state::write(&guard.0, data_file_path).await?;
             proposal_number
         };
 
         // Send a prepare message to all the nodes.
         debug!(
-            "Preparing value `{}` with proposal number:\n{}",
-            original_value,
+            "Preparing proposal number:\n{}",
             // Serialization is safe.
             serde_yaml::to_string(&proposal_number).unwrap(),
         );
@@ -64,7 +63,9 @@ pub async fn propose(
             &client,
             nodes,
             PREPARE_ENDPOINT,
-            &PrepareRequest { proposal_number },
+            &PrepareRequest {
+                proposal_number: Some(proposal_number),
+            },
         )
         .await;
 
@@ -81,15 +82,18 @@ pub async fn propose(
             );
             accepted_proposal.1
         } else {
-            // Propose the given value.
-            debug!("Quorum replied with no existing value.");
-            original_value.to_owned()
+            // Propose the given value, or break if there isn't one.
+            if let Some(original_value) = original_value {
+                debug!("Quorum replied with no existing value.");
+                original_value.to_owned()
+            } else {
+                break;
+            }
         };
 
         // Send an accept message to all the nodes.
         debug!(
-            "Requesting acceptance of value `{}` with proposal number:\n{}",
-            new_value,
+            "Requesting acceptance of value `{}`.",
             // The `unwrap` is safe because serialization should never fail.
             serde_yaml::to_string(&proposal_number).unwrap(),
         );
@@ -113,22 +117,22 @@ pub async fn propose(
             // Update the `next_round`, if applicable. The `unwrap` is safe
             // since it can only fail if a panic already happened.
             let mut guard = state.write().await;
-            if guard.next_round <= response.min_proposal_number.round {
-                guard.next_round = response.min_proposal_number.round + 1;
-                crate::state::write(&guard, data_file_path).await?;
+            if guard.0.next_round <= response.min_proposal_number.round {
+                guard.0.next_round = response.min_proposal_number.round + 1;
+                crate::state::write(&guard.0, data_file_path).await?;
             }
         }
         if value_chosen {
             // The protocol succeeded. Notify all the nodes and return.
             debug!("Consensus achieved. Notifying all the nodes.");
-            broadcast_all::<ChooseResponse>(
+            try_to_broadcast::<ChooseResponse>(
                 &client,
                 nodes,
                 CHOOSE_ENDPOINT,
                 &ChooseRequest { value: new_value },
             )
             .await;
-            info!("Proposer finished.");
+            debug!("Proposer finished.");
             return Ok(());
         }
 
@@ -136,6 +140,8 @@ pub async fn propose(
         debug!("Failed to reach consensus. Starting over.");
         sleep(thread_rng().gen_range(RESTART_DELAY_MIN..RESTART_DELAY_MAX)).await;
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -152,7 +158,7 @@ mod tests {
         let address1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)), 3001);
         let address2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3)), 3002);
         let nodes = vec![address0, address1, address2];
-        let pn = generate_proposal_number(&nodes, 1, &mut state);
+        let pn = generate_proposal_number(&nodes, 1, &mut state.0);
         assert_eq!(pn.round, 0);
         assert_eq!(pn.proposer_address, address1);
     }
@@ -164,8 +170,8 @@ mod tests {
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             3000,
         )];
-        let pn0 = generate_proposal_number(&nodes, 0, &mut state);
-        let pn1 = generate_proposal_number(&nodes, 0, &mut state);
+        let pn0 = generate_proposal_number(&nodes, 0, &mut state.0);
+        let pn1 = generate_proposal_number(&nodes, 0, &mut state.0);
         assert!(pn1 > pn0);
     }
 }

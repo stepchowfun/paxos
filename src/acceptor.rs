@@ -1,5 +1,5 @@
 use {
-    crate::state::{ProposalNumber, State},
+    crate::state::{self, ProposalNumber},
     hyper::{
         header::CONTENT_TYPE,
         server::conn::AddrStream,
@@ -29,7 +29,7 @@ pub const CHOOSE_ENDPOINT: &str = "/choose";
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrepareRequest {
-    pub proposal_number: ProposalNumber,
+    pub proposal_number: Option<ProposalNumber>,
 }
 
 // Response type for the "prepare" endpoint
@@ -40,25 +40,30 @@ pub struct PrepareResponse {
 }
 
 // Logic for the "prepare" endpoint
-fn prepare(request: &PrepareRequest, state: &mut State) -> PrepareResponse {
+fn prepare(
+    request: &PrepareRequest,
+    state: &mut (state::Durable, state::Volatile),
+) -> PrepareResponse {
     debug!(
         "Received prepare request:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
     );
 
-    match &state.min_proposal_number {
-        Some(proposal_number) => {
-            if request.proposal_number > *proposal_number {
-                state.min_proposal_number = Some(request.proposal_number);
+    if let Some(requested_proposal_number) = request.proposal_number {
+        match &state.0.min_proposal_number {
+            Some(proposal_number) => {
+                if requested_proposal_number > *proposal_number {
+                    state.0.min_proposal_number = Some(requested_proposal_number);
+                }
             }
-        }
-        None => {
-            state.min_proposal_number = Some(request.proposal_number);
+            None => {
+                state.0.min_proposal_number = Some(requested_proposal_number);
+            }
         }
     }
 
     PrepareResponse {
-        accepted_proposal: state.accepted_proposal.clone(),
+        accepted_proposal: state.0.accepted_proposal.clone(),
     }
 }
 
@@ -77,25 +82,30 @@ pub struct AcceptResponse {
 }
 
 // Logic for the "accept" endpoint
-fn accept(request: &AcceptRequest, state: &mut State) -> AcceptResponse {
+fn accept(
+    request: &AcceptRequest,
+    state: &mut (state::Durable, state::Volatile),
+) -> AcceptResponse {
     debug!(
         "Received accept request:\n{}",
         serde_yaml::to_string(request).unwrap(), // Serialization is safe.
     );
+
     if state
+        .0
         .min_proposal_number
         .as_ref()
         .map_or(true, |proposal_number| {
             request.proposal.0 >= *proposal_number
         })
     {
-        state.min_proposal_number = Some(request.proposal.0);
-        state.accepted_proposal = Some(request.proposal.clone());
+        state.0.min_proposal_number = Some(request.proposal.0);
+        state.0.accepted_proposal = Some(request.proposal.clone());
     }
 
     AcceptResponse {
         // The `unwrap` is safe since accepts must follow at least one prepare.
-        min_proposal_number: state.min_proposal_number.unwrap(),
+        min_proposal_number: state.0.min_proposal_number.unwrap(),
     }
 }
 
@@ -112,12 +122,15 @@ pub struct ChooseRequest {
 pub struct ChooseResponse;
 
 // Logic for the "choose" endpoint
-fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
-    if state.chosen_value.is_none() {
-        info!("Consensus was achieved.");
+fn choose(
+    request: &ChooseRequest,
+    state: &mut (state::Durable, state::Volatile),
+) -> ChooseResponse {
+    if state.1.chosen_value.is_none() {
+        info!("Consensus achieved.");
         println!("{}", request.value);
         io::stdout().flush().unwrap_or(());
-        state.chosen_value = Some(request.value.clone());
+        state.1.chosen_value = Some(request.value.clone());
     }
     ChooseResponse {}
 }
@@ -125,7 +138,7 @@ fn choose(request: &ChooseRequest, state: &mut State) -> ChooseResponse {
 // Context for each service instance
 #[derive(Clone)]
 struct Context {
-    state: Arc<RwLock<State>>,
+    state: Arc<RwLock<(state::Durable, state::Volatile)>>,
     data_file_path: PathBuf,
 }
 
@@ -158,7 +171,7 @@ async fn handle_request(
             // Handle the request.
             let mut guard = context.state.write().await;
             let response = $endpoint(&payload, &mut guard);
-            crate::state::write(&guard, &context.data_file_path).await?;
+            crate::state::write(&guard.0, &context.data_file_path).await?;
 
             // Serialize the response.
             Ok(Response::new(Body::from(
@@ -181,12 +194,15 @@ async fn handle_request(
 
         // Summary of the program state
         (&Method::GET, "/") => {
-            // Respond with a representation of the program state. The `unwrap`
-            // is safe because serialization should never fail.
-            let state_repr = serde_yaml::to_string(&*context.state.read().await).unwrap();
+            // Respond with a representation of the program state. The `unwrap`s
+            // are safe because serialization should never fail.
+            let state = context.state.read().await;
+            let durable_state_repr = serde_yaml::to_string(&state.0).unwrap();
+            let volatile_state_repr = serde_yaml::to_string(&state.1).unwrap();
             Ok(Response::new(Body::from(format!(
-                "System operational.\n\n{}",
-                state_repr,
+                "System operational.\n\nDurable state:\n\n{}\n\nVolatile state:\n\n{}",
+                durable_state_repr,
+                volatile_state_repr,
             ))))
         }
 
@@ -216,7 +232,7 @@ async fn handle_request(
 
 // Entrypoint for the acceptor
 pub async fn acceptor(
-    state: Arc<RwLock<State>>,
+    state: Arc<RwLock<(state::Durable, state::Volatile)>>,
     data_file_path: &Path,
     address: SocketAddr,
 ) -> Result<(), io::Error> {
@@ -257,49 +273,49 @@ mod tests {
     fn prepare_initializes_min_proposal_number() {
         let mut state = initial();
         let request = PrepareRequest {
-            proposal_number: ProposalNumber {
+            proposal_number: Some(ProposalNumber {
                 round: 0,
                 proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-            },
+            }),
         };
         let response = prepare(&request, &mut state);
-        assert_eq!(state.min_proposal_number, Some(request.proposal_number));
+        assert_eq!(state.0.min_proposal_number, request.proposal_number);
         assert_eq!(response.accepted_proposal, None);
     }
 
     #[test]
     fn prepare_increases_min_proposal_number() {
         let mut state = initial();
-        state.min_proposal_number = Some(ProposalNumber {
+        state.0.min_proposal_number = Some(ProposalNumber {
             round: 0,
             proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         });
         let request = PrepareRequest {
-            proposal_number: ProposalNumber {
+            proposal_number: Some(ProposalNumber {
                 round: 1,
                 proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-            },
+            }),
         };
         let response = prepare(&request, &mut state);
-        assert_eq!(state.min_proposal_number, Some(request.proposal_number));
+        assert_eq!(state.0.min_proposal_number, request.proposal_number);
         assert_eq!(response.accepted_proposal, None);
     }
 
     #[test]
     fn prepare_does_not_decrease_min_proposal_number() {
         let mut state = initial();
-        state.min_proposal_number = Some(ProposalNumber {
+        state.0.min_proposal_number = Some(ProposalNumber {
             round: 1,
             proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         });
         let request = PrepareRequest {
-            proposal_number: ProposalNumber {
+            proposal_number: Some(ProposalNumber {
                 round: 0,
                 proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-            },
+            }),
         };
         let response = prepare(&request, &mut state);
-        assert_ne!(state.min_proposal_number, Some(request.proposal_number));
+        assert_ne!(state.0.min_proposal_number, request.proposal_number);
         assert_eq!(response.accepted_proposal, None);
     }
 
@@ -313,13 +329,13 @@ mod tests {
             },
             "foo".to_string(),
         );
-        state.min_proposal_number = Some(accepted_proposal.0);
-        state.accepted_proposal = Some(accepted_proposal.clone());
+        state.0.min_proposal_number = Some(accepted_proposal.0);
+        state.0.accepted_proposal = Some(accepted_proposal.clone());
         let request = PrepareRequest {
-            proposal_number: ProposalNumber {
+            proposal_number: Some(ProposalNumber {
                 round: 1,
                 proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
-            },
+            }),
         };
         let response = prepare(&request, &mut state);
         assert_eq!(response.accepted_proposal, Some(accepted_proposal));
@@ -337,7 +353,7 @@ mod tests {
         );
 
         let prepare_request = PrepareRequest {
-            proposal_number: proposal.0,
+            proposal_number: Some(proposal.0),
         };
         prepare(&prepare_request, &mut state);
 
@@ -346,9 +362,9 @@ mod tests {
         };
         let accept_response = accept(&accept_request, &mut state);
 
-        assert_eq!(state.accepted_proposal, Some(proposal.clone()));
+        assert_eq!(state.0.accepted_proposal, Some(proposal.clone()));
         assert_eq!(accept_response.min_proposal_number, proposal.0);
-        assert_eq!(state.min_proposal_number, Some(proposal.0));
+        assert_eq!(state.0.min_proposal_number, Some(proposal.0));
     }
 
     #[test]
@@ -371,12 +387,12 @@ mod tests {
         );
 
         let prepare_request1 = PrepareRequest {
-            proposal_number: proposal0.0,
+            proposal_number: Some(proposal0.0),
         };
         prepare(&prepare_request1, &mut state);
 
         let prepare_request2 = PrepareRequest {
-            proposal_number: proposal1.0,
+            proposal_number: Some(proposal1.0),
         };
         prepare(&prepare_request2, &mut state);
 
@@ -385,9 +401,9 @@ mod tests {
         };
         let accept_response = accept(&accept_request, &mut state);
 
-        assert_eq!(state.accepted_proposal, None);
+        assert_eq!(state.0.accepted_proposal, None);
         assert_eq!(accept_response.min_proposal_number, proposal1.0);
-        assert_eq!(state.min_proposal_number, Some(proposal1.0));
+        assert_eq!(state.0.min_proposal_number, Some(proposal1.0));
     }
 
     #[test]
@@ -397,6 +413,6 @@ mod tests {
             value: "foo".to_string(),
         };
         choose(&request, &mut state);
-        assert_eq!(state.chosen_value, Some(request.value));
+        assert_eq!(state.1.chosen_value, Some(request.value));
     }
 }

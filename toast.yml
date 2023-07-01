@@ -198,6 +198,7 @@ tasks:
     dependencies:
       - fetch_crates
     input_paths:
+      - resources
       - src
     output_paths:
       - artifacts
@@ -234,3 +235,21 @@ tasks:
       cp \
         target/aarch64-unknown-linux-musl/release/paxos \
         artifacts/paxos-aarch64-unknown-linux-musl
+
+  validate_release:
+    description: Validate the release.
+    dependencies:
+      - release
+    input_paths:
+      - config.yml
+      - integration-tests/test-0.sh
+      - integration-tests/test-1.sh
+    cache: false
+    user: root
+    command: |
+      # Run the integration test suite.
+      export PAXOS="$(pwd)/artifacts/paxos-x86_64-unknown-linux-gnu"
+      echo 'Running integration test 0...'
+      ./integration-tests/test-0.sh
+      echo 'Running integration test 1...'
+      ./integration-tests/test-1.sh
