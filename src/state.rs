@@ -33,27 +33,34 @@ impl PartialOrd for ProposalNumber {
     }
 }
 
-// The state of the whole program is described by this struct.
+// The part of the program's state that needs to be persisted
 #[derive(Deserialize, Serialize)]
-pub struct State {
+pub struct Durable {
     pub next_round: u64,
     pub min_proposal_number: Option<ProposalNumber>,
     pub accepted_proposal: Option<(ProposalNumber, String)>,
+}
+
+// The part of the program's state that doesn't need to be persisted
+#[derive(Serialize)]
+pub struct Volatile {
     pub chosen_value: Option<String>,
 }
 
 // Return the state in which the program starts.
-pub fn initial() -> State {
-    State {
-        next_round: 0,
-        min_proposal_number: None,
-        accepted_proposal: None,
-        chosen_value: None,
-    }
+pub fn initial() -> (Durable, Volatile) {
+    (
+        Durable {
+            next_round: 0,
+            min_proposal_number: None,
+            accepted_proposal: None,
+        },
+        Volatile { chosen_value: None },
+    )
 }
 
 // Write the state to a file.
-pub async fn write(state: &State, path: &Path) -> io::Result<()> {
+pub async fn write(state: &Durable, path: &Path) -> io::Result<()> {
     // The `unwrap` is safe because serialization should never fail.
     let payload = bincode::serialize(&state).unwrap();
 
@@ -68,7 +75,7 @@ pub async fn write(state: &State, path: &Path) -> io::Result<()> {
 }
 
 // Read the state from a file.
-pub async fn read(path: &Path) -> io::Result<State> {
+pub async fn read(path: &Path) -> io::Result<Durable> {
     // Read the file into a buffer.
     let mut file = File::open(path).await?;
     let mut contents = vec![];

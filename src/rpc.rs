@@ -69,6 +69,21 @@ async fn send<T: DeserializeOwned>(
     }
 }
 
+// Send a request to all nodes without retries. Return once all responses come in.
+pub async fn try_to_broadcast<T: DeserializeOwned>(
+    client: &Client<HttpConnector, Body>,
+    nodes: &[SocketAddr],
+    endpoint: &str,
+    payload: &impl Serialize,
+) -> Vec<Result<T, hyper::Error>> {
+    nodes
+        .iter()
+        .map(|node| try_to_send(client, *node, endpoint, payload))
+        .collect::<FuturesUnordered<_>>()
+        .collect()
+        .await
+}
+
 // Send a request to all nodes with retries. Return once a majority of responses come in.
 pub async fn broadcast_quorum<T: DeserializeOwned>(
     client: &Client<HttpConnector, Body>,
@@ -81,21 +96,6 @@ pub async fn broadcast_quorum<T: DeserializeOwned>(
         .map(|node| send(client, *node, endpoint, payload))
         .collect::<FuturesUnordered<_>>()
         .take(nodes.len() / 2 + 1)
-        .collect()
-        .await
-}
-
-// Send a request to all nodes with retries. Return once all responses come in.
-pub async fn broadcast_all<T: DeserializeOwned>(
-    client: &Client<HttpConnector, Body>,
-    nodes: &[SocketAddr],
-    endpoint: &str,
-    payload: &impl Serialize,
-) -> Vec<T> {
-    nodes
-        .iter()
-        .map(|node| send(client, *node, endpoint, payload))
-        .collect::<FuturesUnordered<_>>()
         .collect()
         .await
 }

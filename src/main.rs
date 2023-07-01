@@ -10,6 +10,7 @@ mod state;
 extern crate log;
 
 use {
+    acceptor::acceptor,
     clap::{App, AppSettings, Arg},
     env_logger::{fmt::Color, Builder},
     log::{Level, LevelFilter},
@@ -24,8 +25,9 @@ use {
         str::FromStr,
         string::ToString,
         sync::Arc,
+        time::Duration,
     },
-    tokio::{sync::RwLock, try_join},
+    tokio::{sync::RwLock, time::sleep, try_join},
 };
 
 // The program version
@@ -43,6 +45,9 @@ const IP_OPTION: &str = "ip";
 const NODE_OPTION: &str = "node";
 const PORT_OPTION: &str = "port";
 const PROPOSE_OPTION: &str = "propose";
+
+// Duration constants
+const PROPOSER_INTERVAL: Duration = Duration::from_secs(1);
 
 // This struct represents a summary of the command-line options
 #[derive(Clone)]
@@ -261,9 +266,9 @@ async fn main() {
 
     // Attempt to read any persisted state.
     match state::read(&settings.data_file_path).await {
-        Ok(persisted_state) => {
+        Ok(durable_state) => {
             let mut guard = state.write().await;
-            *guard = persisted_state;
+            guard.0 = durable_state;
             info!("State loaded from persistent storage.");
         }
         Err(error) => {
@@ -280,25 +285,28 @@ async fn main() {
         }
     }
 
-    // Run the acceptor and the proposer, if applicable. Also, broadcasr any chosen value from the
-    // persisted state.
+    // Run the acceptor and the proposer. Even if there's no value to propose, we run the proposer
+    // periodically to learn if a value was chosen and let the other nodes know about it.
     if let Err(error) = try_join!(
-        acceptor::acceptor(state.clone(), &settings.data_file_path, settings.address),
+        acceptor(state.clone(), &settings.data_file_path, settings.address),
         async {
-            // If there's a value to propose and no chosen value in the persisted state, propose the
-            // value.
-            if state.read().await.chosen_value.is_none() {
-                if let Some(value) = &settings.proposal {
-                    propose(
-                        state.clone(),
-                        &settings.data_file_path,
-                        &settings.nodes,
-                        settings.node_index,
-                        value,
-                    )
-                    .await?;
+            loop {
+                propose(
+                    state.clone(),
+                    &settings.data_file_path,
+                    &settings.nodes,
+                    settings.node_index,
+                    settings.proposal.as_deref(),
+                )
+                .await?;
+
+                if state.read().await.1.chosen_value.is_some() {
+                    break;
                 }
+
+                sleep(PROPOSER_INTERVAL).await;
             }
+
             Ok(())
         },
     ) {
