@@ -507,7 +507,7 @@ dependencies = [
 
 [[package]]
 name = "paxos"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "bincode",
  "clap",
