@@ -58,8 +58,6 @@ OPTIONS:
 
 If you're running macOS or Linux (AArch64 or x86-64), you can install Paxos with this command:
 
-If you're running macOS or Linux on an x86-64 CPU, you can install Paxos with this command:
-
 ```sh
 curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | sh
 ```
