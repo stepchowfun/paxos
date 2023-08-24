@@ -24,7 +24,7 @@ async fn try_to_send<T: DeserializeOwned>(
                 .request(
                     Request::builder()
                         .method(Method::POST)
-                        .uri(format!("http://{}{}", node, endpoint))
+                        .uri(format!("http://{node}{endpoint}"))
                         // The `unwrap` is safe because serialization should never fail.
                         .body(Body::from(bincode::serialize(&payload).unwrap()))
                         .unwrap(), // Safe since we constructed a well-formed request

@@ -200,9 +200,11 @@ async fn handle_request(
             let durable_state_repr = serde_yaml::to_string(&state.0).unwrap();
             let volatile_state_repr = serde_yaml::to_string(&state.1).unwrap();
             Ok(Response::new(Body::from(format!(
-                "System operational.\n\nDurable state:\n\n{}\n\nVolatile state:\n\n{}",
-                durable_state_repr,
-                volatile_state_repr,
+                "System operational.\n\n\
+                Durable state:\n\n\
+                {durable_state_repr}\n\n\
+                Volatile state:\n\n\
+                {volatile_state_repr}",
             ))))
         }
 
@@ -254,7 +256,7 @@ pub async fn acceptor(
     server.await.map_err(|error| {
         io::Error::new(
             io::ErrorKind::Other,
-            format!("Server failed. Reason: {}", error),
+            format!("Server failed. Reason: {error}"),
         )
     })
 }
