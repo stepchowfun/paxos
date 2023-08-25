@@ -95,7 +95,7 @@ fn set_up_logging() {
                 buf,
                 "{} {}",
                 style.value(format!("[{}]", record.level())),
-                &textwrap::fill(&record.args().to_string(), &options)[indent_size..],
+                &textwrap::fill(&record.args().to_string(), options)[indent_size..],
             )
         })
         .init();
@@ -134,8 +134,7 @@ async fn settings() -> io::Result<Settings> {
                 .short("c")
                 .long(CONFIG_FILE_OPTION)
                 .help(&format!(
-                    "Sets the path of the config file (default: {})",
-                    CONFIG_FILE_DEFAULT_PATH,
+                    "Sets the path of the config file (default: {CONFIG_FILE_DEFAULT_PATH})",
                 )),
         )
         .arg(
@@ -145,8 +144,7 @@ async fn settings() -> io::Result<Settings> {
                 .long(DATA_DIR_OPTION)
                 .help(&format!(
                     "Sets the path of the directory in which to store persistent data \
-                     (default: {})",
-                    DATA_DIR_DEFAULT_PATH,
+                     (default: {DATA_DIR_DEFAULT_PATH})",
                 )),
         )
         .arg(
@@ -181,18 +179,14 @@ async fn settings() -> io::Result<Settings> {
     let node_index: usize = node_repr.parse().map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!(
-                "`{}` is not a valid node index. Reason: {}",
-                node_repr,
-                error,
-            ),
+            format!("`{node_repr}` is not a valid node index. Reason: {error}"),
         )
     })?;
     if node_index >= config.nodes.len() {
         // [tag:node_index_valid]
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("There is no node with index {}.", node_repr),
+            format!("There is no node with index {node_repr}."),
         ));
     }
 
@@ -203,7 +197,7 @@ async fn settings() -> io::Result<Settings> {
             raw_ip.parse().map_err(|error| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    format!("`{}` is not a valid IP address. Reason: {}", raw_ip, error),
+                    format!("`{raw_ip}` is not a valid IP address. Reason: {error}"),
                 )
             })
         },
@@ -216,11 +210,7 @@ async fn settings() -> io::Result<Settings> {
             raw_port.parse().map_err(|error| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    format!(
-                        "`{}` is not a valid port number. Reason: {}",
-                        raw_port,
-                        error,
-                    ),
+                    format!("`{raw_port}` is not a valid port number. Reason: {error}"),
                 )
             })
         },
@@ -234,7 +224,7 @@ async fn settings() -> io::Result<Settings> {
     );
 
     // Determine the data file path [tag:data_file_path_has_parent].
-    let data_file_path = Path::join(data_dir_path, format!("{}-{}", ip, port));
+    let data_file_path = Path::join(data_dir_path, format!("{ip}-{port}"));
 
     // Return the settings.
     Ok(Settings {
