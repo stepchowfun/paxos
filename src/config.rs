@@ -40,9 +40,9 @@ mod tests {
 
     #[test]
     fn parse_empty() {
-        let config = r#"
+        let config = r"
 nodes: []
-    "#
+    "
         .trim();
 
         let result = Config { nodes: vec![] };
