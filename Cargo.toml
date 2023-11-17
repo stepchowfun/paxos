@@ -10,6 +10,11 @@ homepage = "https://github.com/stepchowfun/paxos"
 repository = "https://github.com/stepchowfun/paxos"
 readme = "README.md"
 
+[lints]
+clippy.all = "deny"
+clippy.pedantic = "deny"
+rust.warnings = "deny"
+
 [dependencies]
 bincode = "1"
 env_logger = "0.10"
