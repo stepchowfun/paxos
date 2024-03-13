@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euxo pipefail
 
 # Start the Paxos instances in the background.
 echo 'Starting Paxos instance 0…'
