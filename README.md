@@ -1,5 +1,7 @@
 # Paxos
 
+[![Build status](https://github.com/stepchowfun/paxos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/stepchowfun/paxos/actions?query=branch%3Amain)
+
 This is a reference implementation of single-decree Paxos.
 
 ## Configuration
