@@ -95,9 +95,7 @@ fn accept(
         .0
         .min_proposal_number
         .as_ref()
-        .map_or(true, |proposal_number| {
-            request.proposal.0 >= *proposal_number
-        })
+        .is_none_or(|proposal_number| request.proposal.0 >= *proposal_number)
     {
         state.0.min_proposal_number = Some(request.proposal.0);
         state.0.accepted_proposal = Some(request.proposal.clone());
