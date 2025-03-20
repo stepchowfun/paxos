@@ -8,9 +8,7 @@ When setting up the repository on GitHub, configure the following settings:
 
 - Under `General` → `Pull Requests`, enable `Automatically delete head branches`.
 - Under `Secrets and variables`:
-  - Under `Actions`, add the following repository secrets with appropriate values:
-    - `CRATES_IO_TOKEN`
-    - `DOCKER_PASSWORD`
+  - Under `Actions`, add a `DOCKER_PASSWORD` repository secret with an appropriate value.
   - Under `Dependabot`, add the `DOCKER_PASSWORD` repository secret from above.
 - Under `Branches`, click `Add a branch ruleset` and configure it as follows:
   - For the ruleset name, you can use the name of the branch: `main`.
