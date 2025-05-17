@@ -2,7 +2,7 @@
 name = "paxos"
 version = "1.0.8"
 authors = ["Stephan Boyer <stephan@stephanboyer.com>"]
-edition = "2021"
+edition = "2024"
 description = "An implementation of single-decree Paxos."
 license = "MIT"
 documentation = "https://github.com/stepchowfun/paxos"

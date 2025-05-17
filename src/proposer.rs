@@ -1,8 +1,8 @@
 use {
     crate::{
         acceptor::{
-            AcceptRequest, AcceptResponse, ChooseRequest, ChooseResponse, PrepareRequest,
-            PrepareResponse, ACCEPT_ENDPOINT, CHOOSE_ENDPOINT, PREPARE_ENDPOINT,
+            ACCEPT_ENDPOINT, AcceptRequest, AcceptResponse, CHOOSE_ENDPOINT, ChooseRequest,
+            ChooseResponse, PREPARE_ENDPOINT, PrepareRequest, PrepareResponse,
         },
         rpc::{broadcast_quorum, try_to_broadcast},
         state::{self, ProposalNumber},
