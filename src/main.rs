@@ -10,7 +10,7 @@ extern crate log;
 use {
     acceptor::acceptor,
     clap::{App, AppSettings, Arg},
-    env_logger::{fmt::Color, Builder},
+    env_logger::{Builder, fmt::Color},
     log::{Level, LevelFilter},
     proposer::propose,
     state::initial,

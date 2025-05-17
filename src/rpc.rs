@@ -1,9 +1,9 @@
 use {
-    futures::{stream::FuturesUnordered, StreamExt},
-    hyper::{client::HttpConnector, Body, Client, Method, Request},
-    serde::{de::DeserializeOwned, Serialize},
+    futures::{StreamExt, stream::FuturesUnordered},
+    hyper::{Body, Client, Method, Request, client::HttpConnector},
+    serde::{Serialize, de::DeserializeOwned},
     std::{cmp::min, net::SocketAddr},
-    tokio::time::{sleep, Duration},
+    tokio::time::{Duration, sleep},
 };
 
 // Duration constants

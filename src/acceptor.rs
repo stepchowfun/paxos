@@ -1,10 +1,10 @@
 use {
     crate::state::{self, ProposalNumber},
     hyper::{
+        Body, Method, Request, Response, Server, StatusCode,
         header::CONTENT_TYPE,
         server::conn::AddrStream,
         service::{make_service_fn, service_fn},
-        Body, Method, Request, Response, Server, StatusCode,
     },
     serde::{Deserialize, Serialize},
     std::{
@@ -152,10 +152,7 @@ async fn handle_request(
             let body = hyper::body::to_bytes(request.into_body())
                 .await
                 .map_err(|error| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Unable to read request body. Reason: {}", error),
-                    )
+                    io::Error::other(format!("Unable to read request body. Reason: {}", error))
                 })?;
 
             // Parse the body.
@@ -174,10 +171,7 @@ async fn handle_request(
             // Serialize the response.
             Ok(Response::new(Body::from(
                 bincode::serialize(&response).map_err(|error| {
-                    io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Unable to serialize response. Reason: {}", error),
-                    )
+                    io::Error::other(format!("Unable to serialize response. Reason: {}", error))
                 })?,
             )))
         }};
@@ -251,20 +245,17 @@ pub async fn acceptor(
     info!("Listening on http://{}/", address);
 
     // Wait on the server.
-    server.await.map_err(|error| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Server failed. Reason: {error}"),
-        )
-    })
+    server
+        .await
+        .map_err(|error| io::Error::other(format!("Server failed. Reason: {error}")))
 }
 
 #[cfg(test)]
 mod tests {
     use {
         crate::{
-            acceptor::{accept, choose, prepare, AcceptRequest, ChooseRequest, PrepareRequest},
-            state::{initial, ProposalNumber},
+            acceptor::{AcceptRequest, ChooseRequest, PrepareRequest, accept, choose, prepare},
+            state::{ProposalNumber, initial},
         },
         std::net::{IpAddr, Ipv4Addr, SocketAddr},
     };
