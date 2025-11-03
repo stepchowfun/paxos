@@ -110,7 +110,7 @@ mod tests {
 
         let pn1 = ProposalNumber {
             round: 1,
-            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
         };
 
         assert!(pn1 > pn0);
@@ -120,7 +120,7 @@ mod tests {
     fn proposal_ord_proposer_ip() {
         let pn0 = ProposalNumber {
             round: 0,
-            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081),
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8081),
         };
 
         let pn1 = ProposalNumber {
@@ -135,12 +135,12 @@ mod tests {
     fn proposal_ord_proposer_port() {
         let pn0 = ProposalNumber {
             round: 0,
-            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
         };
 
         let pn1 = ProposalNumber {
             round: 0,
-            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081),
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8081),
         };
 
         assert!(pn1 > pn0);

@@ -160,10 +160,7 @@ mod tests {
     #[test]
     fn second_proposal_number() {
         let mut state = initial();
-        let nodes = vec![SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            3000,
-        )];
+        let nodes = vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000)];
         let pn0 = generate_proposal_number(&nodes, 0, &mut state.0);
         let pn1 = generate_proposal_number(&nodes, 0, &mut state.0);
         assert!(pn1 > pn0);

@@ -266,7 +266,7 @@ mod tests {
         let request = PrepareRequest {
             proposal_number: Some(ProposalNumber {
                 round: 0,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             }),
         };
         let response = prepare(&request, &mut state);
@@ -279,12 +279,12 @@ mod tests {
         let mut state = initial();
         state.0.min_proposal_number = Some(ProposalNumber {
             round: 0,
-            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
         });
         let request = PrepareRequest {
             proposal_number: Some(ProposalNumber {
                 round: 1,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             }),
         };
         let response = prepare(&request, &mut state);
@@ -297,12 +297,12 @@ mod tests {
         let mut state = initial();
         state.0.min_proposal_number = Some(ProposalNumber {
             round: 1,
-            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+            proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
         });
         let request = PrepareRequest {
             proposal_number: Some(ProposalNumber {
                 round: 0,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             }),
         };
         let response = prepare(&request, &mut state);
@@ -316,7 +316,7 @@ mod tests {
         let accepted_proposal = (
             ProposalNumber {
                 round: 0,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             },
             "foo".to_string(),
         );
@@ -325,7 +325,7 @@ mod tests {
         let request = PrepareRequest {
             proposal_number: Some(ProposalNumber {
                 round: 1,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             }),
         };
         let response = prepare(&request, &mut state);
@@ -338,7 +338,7 @@ mod tests {
         let proposal = (
             ProposalNumber {
                 round: 0,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             },
             "foo".to_string(),
         );
@@ -364,7 +364,7 @@ mod tests {
         let proposal0 = (
             ProposalNumber {
                 round: 0,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080),
             },
             "foo".to_string(),
         );
@@ -372,7 +372,7 @@ mod tests {
         let proposal1 = (
             ProposalNumber {
                 round: 1,
-                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081),
+                proposer_address: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8081),
             },
             "bar".to_string(),
         );
