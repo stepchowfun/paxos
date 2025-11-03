@@ -59,10 +59,7 @@ nodes:
         .trim();
 
         let result = Config {
-            nodes: vec![SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                3000,
-            )],
+            nodes: vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000)],
         };
 
         assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
