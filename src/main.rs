@@ -45,7 +45,7 @@ const PORT_OPTION: &str = "port";
 const PROPOSE_OPTION: &str = "propose";
 
 // Duration constants
-const PROPOSER_INTERVAL: Duration = Duration::from_secs(1);
+const PROPOSER_LOOP_DELAY: Duration = Duration::from_secs(1);
 
 // This struct represents a summary of the command-line options
 #[derive(Clone)]
@@ -292,7 +292,7 @@ async fn main() {
                     break;
                 }
 
-                sleep(PROPOSER_INTERVAL).await;
+                sleep(PROPOSER_LOOP_DELAY).await;
             }
 
             Ok(())

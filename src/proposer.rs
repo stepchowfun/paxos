@@ -8,9 +8,13 @@ use {
         state::{self, ProposalNumber},
     },
     hyper::Client,
-    std::{io, net::SocketAddr, path::Path, sync::Arc},
-    tokio::sync::RwLock,
+    rand::Rng,
+    std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration},
+    tokio::{sync::RwLock, time::sleep},
 };
+
+// Duration constants
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(1);
 
 // Generate a new proposal number.
 fn generate_proposal_number(
@@ -133,6 +137,13 @@ pub async fn propose(
 
         // The protocol failed. Sleep for a random duration before starting over.
         debug!("Failed to reach consensus. Starting over.");
+        sleep(Duration::from_millis(
+            rand::thread_rng()
+                .gen_range(0..=MAX_RETRY_DELAY.as_millis())
+                .try_into()
+                .unwrap(), // Safe by manual inspection
+        ))
+        .await;
     }
 
     Ok(())
