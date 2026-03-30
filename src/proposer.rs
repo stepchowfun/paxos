@@ -4,11 +4,10 @@ use {
             ACCEPT_ENDPOINT, AcceptRequest, AcceptResponse, CHOOSE_ENDPOINT, ChooseRequest,
             ChooseResponse, PREPARE_ENDPOINT, PrepareRequest, PrepareResponse,
         },
-        rpc::{broadcast_quorum, try_to_broadcast},
+        rpc::{broadcast_quorum, new_client, try_to_broadcast},
         state::{self, ProposalNumber},
     },
-    hyper::Client,
-    rand::Rng,
+    rand::RngExt,
     std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration},
     tokio::{sync::RwLock, time::sleep},
 };
@@ -39,7 +38,7 @@ pub async fn propose(
     original_value: Option<&str>,
 ) -> Result<(), io::Error> {
     // Create an HTTP client.
-    let client = Client::new();
+    let client = new_client();
 
     // Retry until the protocol succeeds.
     loop {
@@ -138,8 +137,8 @@ pub async fn propose(
         // The protocol failed. Sleep for a random duration before starting over.
         debug!("Failed to reach consensus. Starting over.");
         sleep(Duration::from_millis(
-            rand::thread_rng()
-                .gen_range(0..=MAX_RETRY_DELAY.as_millis())
+            rand::rng()
+                .random_range(0..=MAX_RETRY_DELAY.as_millis())
                 .try_into()
                 .unwrap(), // Safe by manual inspection
         ))

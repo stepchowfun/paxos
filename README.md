@@ -20,36 +20,28 @@ paxos --node 2 --propose baz
 
 The cluster will likely achieve consensus immediately after two of the three nodes have been started. The chosen value will be printed to STDOUT by each node in the cluster.
 
-Here are the full usage instructions:
+Here are the supported command-line options:
 
 ```
-USAGE:
-    paxos --node <INDEX>
+Usage: paxos [OPTIONS] --node <INDEX>
 
-OPTIONS:
-    -c, --config-file <PATH>
-            Sets the path of the config file (default: config.yml)
-
-    -d, --data-dir <PATH>
-            Sets the path of the directory in which to store persistent data (default: data)
-
-    -h, --help
-            Prints help information
-
-    -i, --ip <ADDRESS>
-            Sets the IP address to run on (if different from the configuration)
-
-    -n, --node <INDEX>
-            Sets the index of the node corresponding to this instance
-
-    -p, --port <PORT>
-            Sets the port to run on (if different from the configuration)
-
-    -v, --propose <VALUE>
-            Proposes a value to the cluster
-
-    -V, --version
-            Prints version information
+Options:
+  -n, --node <INDEX>
+          Sets the index of the node corresponding to this instance
+  -v, --propose <VALUE>
+          Proposes a value to the cluster
+  -c, --config-file <PATH>
+          Sets the path of the config file (default: config.yml)
+  -d, --data-dir <PATH>
+          Sets the path of the directory in which to store persistent data (default: data)
+  -i, --ip <ADDRESS>
+          Sets the IP address to run on (if different from the configuration)
+  -p, --port <PORT>
+          Sets the port to run on (if different from the configuration)
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 ## Installation instructions
