@@ -9,7 +9,7 @@ extern crate log;
 
 use {
     acceptor::acceptor,
-    clap::{Arg, Command},
+    clap::{ArgAction, Parser},
     env_logger::{Builder, fmt::style::Effects},
     log::{Level, LevelFilter},
     proposer::propose,
@@ -18,7 +18,7 @@ use {
         env,
         io::{self, Write},
         net::SocketAddr,
-        path::{Path, PathBuf},
+        path::PathBuf,
         process::exit,
         str::FromStr,
         string::ToString,
@@ -28,26 +28,80 @@ use {
     tokio::{sync::RwLock, time::sleep, try_join},
 };
 
-// The program version
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 // Defaults
-const CONFIG_FILE_DEFAULT_PATH: &str = "config.yml";
-const DATA_DIR_DEFAULT_PATH: &str = "data";
 const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Info;
-
-// Command-line option names
-const CONFIG_FILE_OPTION: &str = "config-file";
-const DATA_DIR_OPTION: &str = "data-dir";
-const IP_OPTION: &str = "ip";
-const NODE_OPTION: &str = "node";
-const PORT_OPTION: &str = "port";
-const PROPOSE_OPTION: &str = "propose";
 
 // Duration constants
 const PROPOSER_LOOP_DELAY: Duration = Duration::from_secs(1);
 
-// This struct represents a summary of the command-line options
+// This struct represents the raw command-line arguments.
+#[derive(Parser)]
+#[command(
+    about = concat!(
+        env!("CARGO_PKG_DESCRIPTION"),
+        "\n\n",
+        "More information can be found at: ",
+        env!("CARGO_PKG_HOMEPAGE")
+    ),
+    version,
+    disable_version_flag = true
+)]
+struct Cli {
+    #[arg(short, long, help = "Print version", action = ArgAction::Version)]
+    _version: Option<bool>,
+
+    #[arg(
+        short,
+        long,
+        value_name = "INDEX",
+        help = "Set the index of the node corresponding to this instance",
+        required = true
+    )]
+    node: String,
+
+    #[arg(
+        short = 'x',
+        long,
+        value_name = "VALUE",
+        help = "Propose a value to the cluster"
+    )]
+    propose: Option<String>,
+
+    #[arg(
+        short,
+        long,
+        value_name = "PATH",
+        help = "Set the path to the config file",
+        default_value = "config.yml"
+    )]
+    config_file: PathBuf,
+
+    #[arg(
+        short,
+        long,
+        value_name = "PATH",
+        help = "Set the path to the directory in which to store persistent data",
+        default_value = "data"
+    )]
+    data_dir: PathBuf,
+
+    #[arg(
+        short,
+        long,
+        value_name = "ADDRESS",
+        help = "Set the IP address to run on (if different from the configuration)"
+    )]
+    ip: Option<String>,
+
+    #[arg(
+        short,
+        long,
+        help = "Set the port to run on (if different from the configuration)"
+    )]
+    port: Option<String>,
+}
+
+// This struct represents the parsed command-line arguments.
 #[derive(Clone)]
 struct Settings {
     nodes: Vec<SocketAddr>,
@@ -93,75 +147,14 @@ fn set_up_logging() {
 // Parse the command-line options.
 #[allow(clippy::too_many_lines)]
 async fn settings() -> io::Result<Settings> {
-    // Set up the command-line interface.
-    let matches = Command::new("Paxos")
-        .version(VERSION)
-        .author("Stephan Boyer <stephan@stephanboyer.com>")
-        .about("This is an implementation of single-decree paxos.")
-        .next_line_help(true)
-        .arg(
-            Arg::new(NODE_OPTION)
-                .value_name("INDEX")
-                .short('n')
-                .long(NODE_OPTION)
-                .help("Sets the index of the node corresponding to this instance")
-                .required(true), // [tag:node_required]
-        )
-        .arg(
-            Arg::new(PROPOSE_OPTION)
-                .value_name("VALUE")
-                .short('v')
-                .long(PROPOSE_OPTION)
-                .help("Proposes a value to the cluster"),
-        )
-        .arg(
-            Arg::new(CONFIG_FILE_OPTION)
-                .value_name("PATH")
-                .short('c')
-                .long(CONFIG_FILE_OPTION)
-                .help(format!(
-                    "Sets the path of the config file (default: {CONFIG_FILE_DEFAULT_PATH})",
-                )),
-        )
-        .arg(
-            Arg::new(DATA_DIR_OPTION)
-                .value_name("PATH")
-                .short('d')
-                .long(DATA_DIR_OPTION)
-                .help(format!(
-                    "Sets the path of the directory in which to store persistent data \
-                     (default: {DATA_DIR_DEFAULT_PATH})",
-                )),
-        )
-        .arg(
-            Arg::new(IP_OPTION)
-                .value_name("ADDRESS")
-                .short('i')
-                .long(IP_OPTION)
-                .help(
-                    "Sets the IP address to run on \
-                     (if different from the configuration)",
-                ),
-        )
-        .arg(
-            Arg::new(PORT_OPTION)
-                .value_name("PORT")
-                .short('p')
-                .long(PORT_OPTION)
-                .help("Sets the port to run on (if different from the configuration)"),
-        )
-        .get_matches();
-
-    // Parse the config file path.
-    let config_file_path = matches
-        .get_one::<String>(CONFIG_FILE_OPTION)
-        .map_or(CONFIG_FILE_DEFAULT_PATH, String::as_str);
+    let cli = Cli::parse();
 
     // Parse the config file.
-    let config = config::read(Path::new(config_file_path)).await?;
+    let config = config::read(&cli.config_file).await?;
 
-    // Parse the node index. The unwrap is safe due to [ref:node_required].
-    let node_repr = matches.get_one::<String>(NODE_OPTION).unwrap();
+    // Parse the node index. Clap already guarantees that this required positional argument is
+    // present.
+    let node_repr = &cli.node;
     let node_index: usize = node_repr.parse().map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -177,7 +170,7 @@ async fn settings() -> io::Result<Settings> {
     }
 
     // Parse the IP address, if given.
-    let ip = matches.get_one::<String>(IP_OPTION).map_or_else(
+    let ip = cli.ip.as_deref().map_or_else(
         || Ok(config.nodes[node_index].ip()), // [ref:node_index_valid]
         |raw_ip| {
             raw_ip.parse().map_err(|error| {
@@ -190,7 +183,7 @@ async fn settings() -> io::Result<Settings> {
     )?;
 
     // Parse the port number, if given.
-    let port = matches.get_one::<String>(PORT_OPTION).map_or_else(
+    let port = cli.port.as_deref().map_or_else(
         || Ok(config.nodes[node_index].port()), // [ref:node_index_valid]
         |raw_port| {
             raw_port.parse().map_err(|error| {
@@ -202,24 +195,15 @@ async fn settings() -> io::Result<Settings> {
         },
     )?;
 
-    // Parse the data directory path.
-    let data_dir_path = Path::new(
-        matches
-            .get_one::<String>(DATA_DIR_OPTION)
-            .map_or(DATA_DIR_DEFAULT_PATH, String::as_str),
-    );
-
     // Determine the data file path [tag:data_file_path_has_parent].
-    let data_file_path = Path::join(data_dir_path, format!("{ip}-{port}"));
+    let data_file_path = cli.data_dir.join(format!("{ip}-{port}"));
 
     // Return the settings.
     Ok(Settings {
         nodes: config.nodes,
         node_index,
         address: SocketAddr::new(ip, port),
-        proposal: matches
-            .get_one::<String>(PROPOSE_OPTION)
-            .map(ToString::to_string),
+        proposal: cli.propose,
         data_file_path,
     })
 }
@@ -290,5 +274,16 @@ async fn main() {
     ) {
         error!("{error}");
         exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cli() {
+        Cli::command().debug_assert();
     }
 }

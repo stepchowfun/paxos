@@ -43,6 +43,7 @@ async fn try_to_send<T: DeserializeOwned>(
         )
         .await
         .map_err(|error| io::Error::other(format!("Unable to send request. Reason: {error}")))?;
+
     let body = response
         .into_body()
         .collect()

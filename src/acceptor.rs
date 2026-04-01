@@ -250,11 +250,14 @@ pub async fn acceptor(
         let (stream, _) = listener.accept().await.map_err(|error| {
             io::Error::other(format!("Unable to accept connection. Reason: {error}"))
         })?;
+
         let context = context.clone();
+
         tokio::spawn(async move {
             let io = TokioIo::new(stream);
             let service = service_fn(move |request| {
                 let context = context.clone();
+
                 async move {
                     match handle_request(context, request).await {
                         Ok(response) => Ok::<_, Infallible>(response),
@@ -270,6 +273,7 @@ pub async fn acceptor(
                     }
                 }
             });
+
             if let Err(error) = http1::Builder::new().serve_connection(io, service).await {
                 error!("Connection failed. Reason: {error}");
             }
