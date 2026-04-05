@@ -1,11 +1,12 @@
 use {
     crate::state::{self, ProposalNumber},
+    bytes::Bytes,
+    http_body_util::{BodyExt, Full},
     hyper::{
-        Body, Method, Request, Response, Server, StatusCode,
-        header::CONTENT_TYPE,
-        server::conn::AddrStream,
-        service::{make_service_fn, service_fn},
+        Method, Request, Response, StatusCode, body::Incoming, header::CONTENT_TYPE,
+        server::conn::http1, service::service_fn,
     },
+    hyper_util::rt::TokioIo,
     serde::{Deserialize, Serialize},
     std::{
         convert::Infallible,
@@ -14,7 +15,7 @@ use {
         path::{Path, PathBuf},
         sync::Arc,
     },
-    tokio::sync::RwLock,
+    tokio::{net::TcpListener, sync::RwLock},
 };
 
 // We embed the favicon directly into the compiled binary.
@@ -143,20 +144,23 @@ struct Context {
 // Request handler
 async fn handle_request(
     context: Context,
-    request: Request<Body>,
-) -> Result<Response<Body>, io::Error> {
+    request: Request<Incoming>,
+) -> Result<Response<Full<Bytes>>, io::Error> {
     // This macro eliminates some boilerplate in the match expression below.
     macro_rules! rpc {
         ($endpoint:ident) => {{
             // Collect the body into a byte array.
-            let body = hyper::body::to_bytes(request.into_body())
+            let body = request
+                .into_body()
+                .collect()
                 .await
+                .map(|body| body.to_bytes())
                 .map_err(|error| {
                     io::Error::other(format!("Unable to read request body. Reason: {}", error))
                 })?;
 
             // Parse the body.
-            let payload = bincode::deserialize(&body).map_err(|error| {
+            let payload = serde_json::from_slice(&body).map_err(|error| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("Unable to parse request body. Reason: {}", error),
@@ -169,11 +173,11 @@ async fn handle_request(
             crate::state::write(&guard.0, &context.data_file_path).await?;
 
             // Serialize the response.
-            Ok(Response::new(Body::from(
-                bincode::serialize(&response).map_err(|error| {
+            Ok(Response::new(Full::new(Bytes::from(
+                serde_json::to_vec(&response).map_err(|error| {
                     io::Error::other(format!("Unable to serialize response. Reason: {}", error))
                 })?,
-            )))
+            ))))
         }};
     }
 
@@ -191,13 +195,13 @@ async fn handle_request(
             let state = context.state.read().await;
             let durable_state_repr = serde_yaml::to_string(&state.0).unwrap();
             let volatile_state_repr = serde_yaml::to_string(&state.1).unwrap();
-            Ok(Response::new(Body::from(format!(
+            Ok(Response::new(Full::new(Bytes::from(format!(
                 "System operational.\n\n\
                 Durable state:\n\n\
                 {durable_state_repr}\n\n\
                 Volatile state:\n\n\
                 {volatile_state_repr}",
-            ))))
+            )))))
         }
 
         // Favicon
@@ -205,7 +209,7 @@ async fn handle_request(
             // Respond with the favicon.
             Ok(Response::builder()
                 .header(CONTENT_TYPE, "image/x-icon")
-                .body(Body::from(FAVICON_DATA))
+                .body(Full::new(Bytes::from_static(FAVICON_DATA)))
                 // The `unwrap` is safe since we constructed a well-formed
                 // response.
                 .unwrap())
@@ -216,7 +220,7 @@ async fn handle_request(
             // Respond with a generic 404 page.
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Not found."))
+                .body(Full::new(Bytes::from_static(b"Not found.")))
                 // The `unwrap` is safe since we constructed a well-formed
                 // response.
                 .unwrap())
@@ -235,19 +239,46 @@ pub async fn acceptor(
         state,
         data_file_path: data_file_path.to_owned(),
     };
-    let server = Server::bind(&address).serve(make_service_fn(move |_connection: &AddrStream| {
-        let context = context.clone();
-        let service = service_fn(move |request| handle_request(context.clone(), request));
-        async move { Ok::<_, Infallible>(service) }
-    }));
+    let listener = TcpListener::bind(address)
+        .await
+        .map_err(|error| io::Error::other(format!("Unable to bind socket. Reason: {error}")))?;
 
     // Tell the user the address of the server.
-    info!("Listening on http://{}/", address);
+    info!("Listening on http://{address}/");
 
-    // Wait on the server.
-    server
-        .await
-        .map_err(|error| io::Error::other(format!("Server failed. Reason: {error}")))
+    loop {
+        let (stream, _) = listener.accept().await.map_err(|error| {
+            io::Error::other(format!("Unable to accept connection. Reason: {error}"))
+        })?;
+
+        let context = context.clone();
+
+        tokio::spawn(async move {
+            let io = TokioIo::new(stream);
+            let service = service_fn(move |request| {
+                let context = context.clone();
+
+                async move {
+                    match handle_request(context, request).await {
+                        Ok(response) => Ok::<_, Infallible>(response),
+                        Err(error) => {
+                            error!("{error}");
+                            Ok::<_, Infallible>(
+                                Response::builder()
+                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(Full::new(Bytes::from(error.to_string())))
+                                    .unwrap(),
+                            )
+                        }
+                    }
+                }
+            });
+
+            if let Err(error) = http1::Builder::new().serve_connection(io, service).await {
+                error!("Connection failed. Reason: {error}");
+            }
+        });
+    }
 }
 
 #[cfg(test)]

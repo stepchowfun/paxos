@@ -62,7 +62,7 @@ pub fn initial() -> (Durable, Volatile) {
 // Write the state to a file.
 pub async fn write(state: &Durable, path: &Path) -> io::Result<()> {
     // The `unwrap` is safe because serialization should never fail.
-    let payload = bincode::serialize(&state).unwrap();
+    let payload = serde_json::to_vec(&state).unwrap();
 
     // The `unwrap` is safe due to [ref:data_file_path_has_parent].
     let parent = path.parent().unwrap().to_owned();
@@ -82,7 +82,7 @@ pub async fn read(path: &Path) -> io::Result<Durable> {
     file.read_to_end(&mut contents).await?;
 
     // Deserialize the data.
-    bincode::deserialize(&contents).map_err(|error| {
+    serde_json::from_slice(&contents).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
