@@ -1,16 +1,14 @@
-use {
-    crate::{
-        acceptor::{
-            ACCEPT_ENDPOINT, AcceptRequest, AcceptResponse, CHOOSE_ENDPOINT, ChooseRequest,
-            ChooseResponse, PREPARE_ENDPOINT, PrepareRequest, PrepareResponse,
-        },
-        rpc::{broadcast_quorum, new_client, try_to_broadcast},
-        state::{self, ProposalNumber},
+use crate::{
+    acceptor::{
+        ACCEPT_ENDPOINT, AcceptRequest, AcceptResponse, CHOOSE_ENDPOINT, ChooseRequest,
+        ChooseResponse, PREPARE_ENDPOINT, PrepareRequest, PrepareResponse,
     },
-    rand::RngExt,
-    std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration},
-    tokio::{sync::RwLock, time::sleep},
+    rpc::{broadcast_quorum, new_client, try_to_broadcast},
+    state::{self, ProposalNumber},
 };
+use rand::RngExt;
+use std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration};
+use tokio::{sync::RwLock, time::sleep};
 
 // Duration constants
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -150,10 +148,8 @@ pub async fn propose(
 
 #[cfg(test)]
 mod tests {
-    use {
-        crate::{proposer::generate_proposal_number, state::initial},
-        std::net::{IpAddr, Ipv4Addr, SocketAddr},
-    };
+    use crate::{proposer::generate_proposal_number, state::initial};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
     fn first_proposal_number() {

@@ -1,8 +1,6 @@
-use {
-    serde::{Deserialize, Serialize},
-    std::{io, net::SocketAddr, path::Path},
-    tokio::{fs::File, io::AsyncReadExt},
-};
+use serde::{Deserialize, Serialize};
+use std::{io, net::SocketAddr, path::Path};
+use tokio::{fs::File, io::AsyncReadExt};
 
 // A program configuration
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -33,10 +31,8 @@ pub async fn read(path: &Path) -> io::Result<Config> {
 
 #[cfg(test)]
 mod tests {
-    use {
-        crate::config::Config,
-        std::net::{IpAddr, Ipv4Addr, SocketAddr},
-    };
+    use crate::config::Config;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
     fn parse_empty() {

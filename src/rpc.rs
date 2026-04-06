@@ -1,16 +1,14 @@
-use {
-    bytes::Bytes,
-    futures::{StreamExt, stream::FuturesUnordered},
-    http_body_util::{BodyExt, Full},
-    hyper::{Method, Request},
-    hyper_util::{
-        client::legacy::{Client, connect::HttpConnector},
-        rt::TokioExecutor,
-    },
-    serde::{Serialize, de::DeserializeOwned},
-    std::{cmp::min, io, net::SocketAddr},
-    tokio::time::{Duration, sleep},
+use bytes::Bytes;
+use futures::{StreamExt, stream::FuturesUnordered};
+use http_body_util::{BodyExt, Full};
+use hyper::{Method, Request};
+use hyper_util::{
+    client::legacy::{Client, connect::HttpConnector},
+    rt::TokioExecutor,
 };
+use serde::{Serialize, de::DeserializeOwned};
+use std::{cmp::min, io, net::SocketAddr};
+use tokio::time::{Duration, sleep};
 
 // Duration constants
 const EXPONENTIAL_BACKOFF_MIN: Duration = Duration::from_millis(50);

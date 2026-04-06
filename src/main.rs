@@ -7,26 +7,24 @@ mod state;
 #[macro_use]
 extern crate log;
 
-use {
-    acceptor::acceptor,
-    clap::{ArgAction, Parser},
-    env_logger::{Builder, fmt::style::Effects},
-    log::{Level, LevelFilter},
-    proposer::propose,
-    state::initial,
-    std::{
-        env,
-        io::{self, Write},
-        net::SocketAddr,
-        path::PathBuf,
-        process::exit,
-        str::FromStr,
-        string::ToString,
-        sync::Arc,
-        time::Duration,
-    },
-    tokio::{sync::RwLock, time::sleep, try_join},
+use acceptor::acceptor;
+use clap::{ArgAction, Parser};
+use env_logger::{Builder, fmt::style::Effects};
+use log::{Level, LevelFilter};
+use proposer::propose;
+use state::initial;
+use std::{
+    env,
+    io::{self, Write},
+    net::SocketAddr,
+    path::PathBuf,
+    process::exit,
+    str::FromStr,
+    string::ToString,
+    sync::Arc,
+    time::Duration,
 };
+use tokio::{sync::RwLock, time::sleep, try_join};
 
 // Defaults
 const DEFAULT_LOG_LEVEL: LevelFilter = LevelFilter::Info;

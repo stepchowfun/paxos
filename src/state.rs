@@ -1,10 +1,8 @@
-use {
-    serde::{Deserialize, Serialize},
-    std::{cmp::Ordering, io, net::SocketAddr, path::Path},
-    tokio::{
-        fs::{File, create_dir_all},
-        io::{AsyncReadExt, AsyncWriteExt},
-    },
+use serde::{Deserialize, Serialize};
+use std::{cmp::Ordering, io, net::SocketAddr, path::Path};
+use tokio::{
+    fs::{File, create_dir_all},
+    io::{AsyncReadExt, AsyncWriteExt},
 };
 
 // A representation of a proposal number
@@ -96,10 +94,8 @@ pub async fn read(path: &Path) -> io::Result<Durable> {
 
 #[cfg(test)]
 mod tests {
-    use {
-        crate::state::ProposalNumber,
-        std::net::{IpAddr, Ipv4Addr, SocketAddr},
-    };
+    use crate::state::ProposalNumber;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
     fn proposal_ord_round() {
