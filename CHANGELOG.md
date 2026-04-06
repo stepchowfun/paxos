@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-05
+
+### Fixed
+- The installation script now handles SELinux correctly and no longer redirects some output incorrectly.
+
+### Changed
+- The proposer now sleeps for a random duration before retrying.
+- Some follow-up fixes have been made after the upgrade to Hyper.
+- Dependencies and development tooling have been updated.
+
 ## [1.0.8] - 2023-07-01
 
 ### Changed
