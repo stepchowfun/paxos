@@ -1,22 +1,20 @@
-use {
-    crate::state::{self, ProposalNumber},
-    bytes::Bytes,
-    http_body_util::{BodyExt, Full},
-    hyper::{
-        Method, Request, Response, StatusCode, body::Incoming, header::CONTENT_TYPE,
-        server::conn::http1, service::service_fn,
-    },
-    hyper_util::rt::{TokioIo, TokioTimer},
-    serde::{Deserialize, Serialize},
-    std::{
-        convert::Infallible,
-        io::{self, Write},
-        net::SocketAddr,
-        path::{Path, PathBuf},
-        sync::Arc,
-    },
-    tokio::{net::TcpListener, sync::RwLock},
+use crate::state::{self, ProposalNumber};
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
+use hyper::{
+    Method, Request, Response, StatusCode, body::Incoming, header::CONTENT_TYPE,
+    server::conn::http1, service::service_fn,
 };
+use hyper_util::rt::{TokioIo, TokioTimer};
+use serde::{Deserialize, Serialize};
+use std::{
+    convert::Infallible,
+    io::{self, Write},
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use tokio::{net::TcpListener, sync::RwLock};
 
 // We embed the favicon directly into the compiled binary.
 const FAVICON_DATA: &[u8] = include_bytes!("../resources/favicon.ico");
@@ -293,13 +291,11 @@ pub async fn acceptor(
 
 #[cfg(test)]
 mod tests {
-    use {
-        crate::{
-            acceptor::{AcceptRequest, ChooseRequest, PrepareRequest, accept, choose, prepare},
-            state::{ProposalNumber, initial},
-        },
-        std::net::{IpAddr, Ipv4Addr, SocketAddr},
+    use crate::{
+        acceptor::{AcceptRequest, ChooseRequest, PrepareRequest, accept, choose, prepare},
+        state::{ProposalNumber, initial},
     };
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     #[test]
     fn prepare_initializes_min_proposal_number() {
