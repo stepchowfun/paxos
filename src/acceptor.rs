@@ -6,7 +6,7 @@ use {
         Method, Request, Response, StatusCode, body::Incoming, header::CONTENT_TYPE,
         server::conn::http1, service::service_fn,
     },
-    hyper_util::rt::TokioIo,
+    hyper_util::rt::{TokioIo, TokioTimer},
     serde::{Deserialize, Serialize},
     std::{
         convert::Infallible,
@@ -254,28 +254,38 @@ pub async fn acceptor(
         let context = context.clone();
 
         tokio::spawn(async move {
-            let io = TokioIo::new(stream);
-            let service = service_fn(move |request| {
-                let context = context.clone();
+            if let Err(error) = http1::Builder::new()
+                .timer(TokioTimer::new())
+                .serve_connection(
+                    TokioIo::new(stream),
+                    service_fn(move |request| {
+                        let context = context.clone();
 
-                async move {
-                    match handle_request(context, request).await {
-                        Ok(response) => Ok::<_, Infallible>(response),
-                        Err(error) => {
-                            error!("{error}");
-                            Ok::<_, Infallible>(
-                                Response::builder()
-                                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                                    .body(Full::new(Bytes::from(error.to_string())))
-                                    .unwrap(),
-                            )
+                        async move {
+                            match handle_request(context, request).await {
+                                Ok(response) => Ok(response),
+                                Err(error) => {
+                                    error!("{error}");
+                                    Ok::<_, Infallible>(
+                                        Response::builder()
+                                            .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                            .body(Full::new(Bytes::from(error.to_string())))
+                                            .unwrap(),
+                                    )
+                                }
+                            }
                         }
-                    }
+                    }),
+                )
+                .await
+            {
+                if error.is_incomplete_message() {
+                    // Proposers stop waiting once a quorum responds, which can drop the extra
+                    // in-flight HTTP requests before the peer finishes reading them.
+                    trace!("Connection closed before message completed.");
+                } else {
+                    info!("Connection failed. Reason: {error}");
                 }
-            });
-
-            if let Err(error) = http1::Builder::new().serve_connection(io, service).await {
-                error!("Connection failed. Reason: {error}");
             }
         });
     }

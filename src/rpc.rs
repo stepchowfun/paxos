@@ -36,7 +36,6 @@ async fn try_to_send<T: DeserializeOwned>(
             Request::builder()
                 .method(Method::POST)
                 .uri(format!("http://{node}{endpoint}"))
-                .header("content-type", "application/json")
                 // The `unwrap` is safe because serialization should never fail.
                 .body(Full::new(Bytes::from(serde_json::to_vec(payload).unwrap())))
                 .unwrap(), // Safe since we constructed a well-formed request
