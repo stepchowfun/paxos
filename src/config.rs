@@ -17,7 +17,7 @@ pub async fn read(path: &Path) -> io::Result<Config> {
     file.read_to_end(&mut contents).await?;
 
     // Deserialize the data.
-    serde_yaml::from_slice(&contents).map_err(|error| {
+    yaml_serde::from_slice(&contents).map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!(
@@ -43,7 +43,7 @@ nodes: []
 
         let result = Config { nodes: vec![] };
 
-        assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
+        assert_eq!(yaml_serde::from_str::<Config>(config).unwrap(), result);
     }
 
     #[test]
@@ -58,7 +58,7 @@ nodes:
             nodes: vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3000)],
         };
 
-        assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
+        assert_eq!(yaml_serde::from_str::<Config>(config).unwrap(), result);
     }
 
     #[test]
@@ -79,6 +79,6 @@ nodes:
             ],
         };
 
-        assert_eq!(serde_yaml::from_str::<Config>(config).unwrap(), result);
+        assert_eq!(yaml_serde::from_str::<Config>(config).unwrap(), result);
     }
 }

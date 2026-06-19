@@ -45,7 +45,7 @@ fn prepare(
 ) -> PrepareResponse {
     debug!(
         "Received prepare request:\n{}",
-        serde_yaml::to_string(request).unwrap(), // Serialization is safe.
+        yaml_serde::to_string(request).unwrap(), // Serialization is safe.
     );
 
     if let Some(requested_proposal_number) = request.proposal_number {
@@ -87,7 +87,7 @@ fn accept(
 ) -> AcceptResponse {
     debug!(
         "Received accept request:\n{}",
-        serde_yaml::to_string(request).unwrap(), // Serialization is safe.
+        yaml_serde::to_string(request).unwrap(), // Serialization is safe.
     );
 
     if state
@@ -191,8 +191,8 @@ async fn handle_request(
             // Respond with a representation of the program state. The `unwrap`s
             // are safe because serialization should never fail.
             let state = context.state.read().await;
-            let durable_state_repr = serde_yaml::to_string(&state.0).unwrap();
-            let volatile_state_repr = serde_yaml::to_string(&state.1).unwrap();
+            let durable_state_repr = yaml_serde::to_string(&state.0).unwrap();
+            let volatile_state_repr = yaml_serde::to_string(&state.1).unwrap();
             Ok(Response::new(Full::new(Bytes::from(format!(
                 "System operational.\n\n\
                 Durable state:\n\n\
