@@ -53,7 +53,7 @@ pub async fn propose(
         debug!(
             "Preparing proposal number:\n{}",
             // Serialization is safe.
-            serde_yaml::to_string(&proposal_number).unwrap(),
+            yaml_serde::to_string(&proposal_number).unwrap(),
         );
         let prepare_responses = broadcast_quorum::<PrepareResponse>(
             &client,
@@ -91,7 +91,7 @@ pub async fn propose(
         debug!(
             "Requesting acceptance of value `{}`.",
             // The `unwrap` is safe because serialization should never fail.
-            serde_yaml::to_string(&proposal_number).unwrap(),
+            yaml_serde::to_string(&proposal_number).unwrap(),
         );
         let accept_responses = broadcast_quorum::<AcceptResponse>(
             &client,
