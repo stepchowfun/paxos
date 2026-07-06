@@ -8,6 +8,8 @@ This is a reference implementation of single-decree Paxos.
 
 By default, the program looks for a configuration file named `config.yml` in the working directory. This file describes the cluster membership. An [example configuration](https://github.com/stepchowfun/paxos/blob/main/config.yml) is provided in this repository.
 
+<!-- [file:config.yml] -->
+
 ## Usage
 
 For a simple demonstration, run the following commands from separate terminals in the repository root:
