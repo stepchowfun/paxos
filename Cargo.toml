@@ -18,7 +18,7 @@ rust.warnings = "deny"
 
 [dependencies]
 bytes = "1.12.1"
-clap = { version = "4.6.3", features = ["derive", "wrap_help"] }
+clap = { version = "4.6.4", features = ["derive", "wrap_help"] }
 env_logger = "0.11.11"
 futures = "0.3.33"
 http-body-util = "0.1.4"
