@@ -237,7 +237,7 @@ async fn main() {
             } else {
                 error!(
                     "Unable to load state file `{}`. Reason: {}",
-                    settings.data_file_path.to_string_lossy(),
+                    settings.data_file_path.display(),
                     error,
                 );
                 exit(1);
