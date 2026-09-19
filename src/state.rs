@@ -85,7 +85,7 @@ pub async fn read(path: &Path) -> io::Result<Durable> {
             io::ErrorKind::InvalidData,
             format!(
                 "Error loading state file `{}`. Reason: {}",
-                path.to_string_lossy(),
+                path.display(),
                 error,
             ),
         )

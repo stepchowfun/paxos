@@ -22,7 +22,7 @@ pub async fn read(path: &Path) -> io::Result<Config> {
             io::ErrorKind::InvalidData,
             format!(
                 "Error loading config file `{}`. Reason: {}",
-                path.to_string_lossy(),
+                path.display(),
                 error,
             ),
         )
