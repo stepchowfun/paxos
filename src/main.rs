@@ -42,6 +42,7 @@ const PROPOSER_LOOP_DELAY: Duration = Duration::from_secs(1);
         env!("CARGO_PKG_HOMEPAGE")
     ),
     version,
+    display_name = "Paxos",
     disable_version_flag = true
 )]
 struct Cli {
