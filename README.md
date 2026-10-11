@@ -62,11 +62,11 @@ For example, the following will install Paxos into the working directory:
 curl https://raw.githubusercontent.com/stepchowfun/paxos/main/install.sh -LSfs | PREFIX=. sh
 ```
 
-If you prefer not to use this installation method, you can download the binary from the [releases page](https://github.com/stepchowfun/paxos/releases), make it executable (e.g., with `chmod`), and place it in some directory in your [`PATH`](https://en.wikipedia.org/wiki/PATH_\(variable\)) (e.g., `/usr/local/bin`).
+If you prefer not to use this installation method, you can download the binary from the [latest release](https://github.com/stepchowfun/paxos/releases/latest), make it executable (e.g., with `chmod`), and place it in some directory in your [`PATH`](https://en.wikipedia.org/wiki/PATH_\(variable\)) (e.g., `/usr/local/bin`).
 
 ### Installation on Windows (AArch64 or x86-64)
 
-If you're running Windows (AArch64 or x86-64), download the latest binary from the [releases page](https://github.com/stepchowfun/paxos/releases) and rename it to `paxos` (or `paxos.exe` if you have file extensions visible). Create a directory called `Paxos` in your `%PROGRAMFILES%` directory (e.g., `C:\Program Files\Paxos`), and place the renamed binary in there. Then, in the "Advanced" tab of the "System Properties" section of Control Panel, click on "Environment Variables..." and add the full path to the new `Paxos` directory to the `PATH` variable under "System variables". Note that the `Program Files` directory might have a different name if Windows is configured for a language other than English.
+If you're running Windows (AArch64 or x86-64), download the binary from the [latest release](https://github.com/stepchowfun/paxos/releases/latest) and rename it to `paxos` (or `paxos.exe` if you have file extensions visible). Create a directory called `Paxos` in your `%PROGRAMFILES%` directory (e.g., `C:\Program Files\Paxos`), and place the renamed binary in there. Then, in the "Advanced" tab of the "System Properties" section of Control Panel, click on "Environment Variables..." and add the full path to the new `Paxos` directory to the `PATH` variable under "System variables". Note that the `Program Files` directory might have a different name if Windows is configured for a language other than English.
 
 To update an existing installation, simply replace the existing binary.
 
