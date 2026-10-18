@@ -248,14 +248,14 @@ tasks:
       - release
     input_paths:
       - config.yml
-      - integration_tests/test-0.sh
-      - integration_tests/test-1.sh
+      - integration_tests/test_0.sh
+      - integration_tests/test_1.sh
     cache: false
     user: root
     command: |
       # Run the integration test suite.
       export PAXOS="$(pwd)/artifacts/paxos-x86_64-unknown-linux-gnu"
       echo 'Running integration test 0...'
-      ./integration_tests/test-0.sh
+      ./integration_tests/test_0.sh
       echo 'Running integration test 1...'
-      ./integration_tests/test-1.sh
+      ./integration_tests/test_1.sh
