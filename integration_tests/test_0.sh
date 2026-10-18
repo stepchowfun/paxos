@@ -21,8 +21,10 @@ LOG_LEVEL=debug "$PAXOS" --node 2 --propose bar | tee node-2.txt &
 echo 'Waiting for Paxos instance 2…'
 grep -q 'foo' <(tail -F node-2.txt)
 
-# Kill all the subprocesses spawned by this script.
+# Kill all the subprocesses spawned by this script, and wait for them to exit so they release their
+# ports and finish with their state files before anything else uses them.
 pkill -P "$$"
+wait || true
 
 # Clean up the files.
 rm node-0.txt node-1.txt node-2.txt
