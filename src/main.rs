@@ -4,13 +4,10 @@ mod proposer;
 mod rpc;
 mod state;
 
-#[macro_use]
-extern crate log;
-
 use acceptor::acceptor;
 use clap::{ArgAction, Parser};
 use env_logger::{Builder, fmt::style::Effects};
-use log::{Level, LevelFilter};
+use log::{Level, LevelFilter, error, info};
 use proposer::propose;
 use state::initial;
 use std::{
@@ -144,7 +141,6 @@ fn set_up_logging() {
 }
 
 // Parse the command-line options.
-#[allow(clippy::too_many_lines)]
 async fn settings() -> io::Result<Settings> {
     let cli = Cli::parse();
 

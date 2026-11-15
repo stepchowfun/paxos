@@ -6,6 +6,7 @@ use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
+use log::debug;
 use serde::{Serialize, de::DeserializeOwned};
 use std::{cmp::min, io, net::SocketAddr};
 use tokio::time::{Duration, sleep};

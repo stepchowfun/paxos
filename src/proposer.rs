@@ -6,6 +6,7 @@ use crate::{
     rpc::{broadcast_quorum, new_client, try_to_broadcast},
     state::{self, ProposalNumber},
 };
+use log::debug;
 use rand::RngExt;
 use std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::sleep};
