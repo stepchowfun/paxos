@@ -6,6 +6,7 @@ use hyper::{
     server::conn::http1, service::service_fn,
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
+use log::{debug, error, info, trace};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::Infallible,
