@@ -39,7 +39,7 @@ const PROPOSER_LOOP_DELAY: Duration = Duration::from_secs(1);
         env!("CARGO_PKG_DESCRIPTION"),
         "\n\n",
         "More information can be found at: ",
-        env!("CARGO_PKG_HOMEPAGE")
+        env!("CARGO_PKG_REPOSITORY")
     ),
     version,
     display_name = "Paxos",

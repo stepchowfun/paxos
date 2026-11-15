@@ -6,7 +6,6 @@ edition = "2024"
 description = "An implementation of single-decree Paxos."
 license = "MIT"
 documentation = "https://github.com/stepchowfun/paxos"
-homepage = "https://github.com/stepchowfun/paxos"
 repository = "https://github.com/stepchowfun/paxos"
 readme = "README.md"
 
