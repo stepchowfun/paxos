@@ -21,19 +21,11 @@ rand = "0.10.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 textwrap = { version = "0.16.4", features = ["smawk", "terminal_size", "unicode-linebreak", "unicode-width"] }
-tokio = {
-  version = "1.54.1",
-  features = [
-    "fs",
-    "io-util",
-    "macros",
-    "net",
-    "rt-multi-thread",
-    "sync",
-    "time",
-  ]
-}
 yaml_serde = "0.10.7"
+
+[dependencies.tokio]
+version = "1.54.1"
+features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"]
 
 [lints]
 clippy.all = { level = "deny", priority = -1 }
