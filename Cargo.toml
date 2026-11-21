@@ -1,19 +1,12 @@
 [package]
 name = "paxos"
 version = "1.1.0"
-authors = ["Stephan Boyer <stephan@stephanboyer.com>"]
 edition = "2024"
 description = "An implementation of single-decree Paxos."
-license = "MIT"
 documentation = "https://github.com/stepchowfun/paxos"
-repository = "https://github.com/stepchowfun/paxos"
 readme = "README.md"
-
-[lints]
-clippy.all = { level = "deny", priority = -1 }
-clippy.default_numeric_fallback = "deny"
-clippy.pedantic = { level = "deny", priority = -1 }
-rust.warnings = "deny"
+repository = "https://github.com/stepchowfun/paxos"
+license = "MIT"
 
 [dependencies]
 bytes = "1.12.2"
@@ -27,9 +20,10 @@ log = "0.4.35"
 rand = "0.10.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-yaml_serde = "0.10.7"
 textwrap = { version = "0.16.4", features = ["smawk", "terminal_size", "unicode-linebreak", "unicode-width"] }
-tokio = { version = "1.54.1", features = [
+tokio = {
+  version = "1.54.1",
+  features = [
     "fs",
     "io-util",
     "macros",
@@ -37,4 +31,12 @@ tokio = { version = "1.54.1", features = [
     "rt-multi-thread",
     "sync",
     "time",
-] }
+  ]
+}
+yaml_serde = "0.10.7"
+
+[lints]
+clippy.all = { level = "deny", priority = -1 }
+clippy.default_numeric_fallback = "deny"
+clippy.pedantic = { level = "deny", priority = -1 }
+rust.warnings = "deny"
